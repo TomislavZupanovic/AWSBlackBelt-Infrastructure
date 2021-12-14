@@ -9,11 +9,11 @@ from aws_cdk import core as cdk
 # being updated to use `cdk`.  You may delete this import if you don't need it.
 from aws_cdk import core
 
-from aws_black_belt_infrastructure.aws_black_belt_infrastructure_stack import AwsBlackBeltInfrastructureStack
+from aws_black_belt_infrastructure.storage_layer_stack import StorageLayerStack
 
 
 app = core.App()
-AwsBlackBeltInfrastructureStack(app, "AwsBlackBeltInfrastructureStack",
+StorageLayerStack(app, "AwsBlackBeltInfrastructureStack",
     # If you don't specify 'env', this stack will be environment-agnostic.
     # Account/Region-dependent features and context lookups will not work,
     # but a single synthesized template can be deployed anywhere.
