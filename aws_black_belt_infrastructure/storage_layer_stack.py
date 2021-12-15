@@ -6,7 +6,7 @@ from aws_cdk import (
     aws_ec2
 )
 
-class StorageLayerStack(cdk.Stack):
+class StorageLayer(cdk.Stack):
 
     def __init__(self, scope: cdk.Construct, construct_id: str, parameters: dict, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
@@ -19,9 +19,9 @@ class StorageLayerStack(cdk.Stack):
         cdk.Tags.of(self).add("Project", "BlackBelt")
         cdk.Tags.of(self).add("Owner", "Tomislav Zupanovic")
         
-        #======================================================================================
-        #=========================================VPC==========================================
-        #======================================================================================
+        #===========================================================================================================================
+        #=========================================================VPC===============================================================
+        #===========================================================================================================================
 
         # Import VPC and subnets
         vpc = aws_ec2.Vpc.from_lookup(self, "MainVPC", vpc_name="aast-innovation-vpc")
@@ -33,9 +33,9 @@ class StorageLayerStack(cdk.Stack):
                                                         vpc=vpc, description="Allow all outbound access only",
                                                         allow_all_outbound=True)
         
-        #======================================================================================
-        #=========================================S3===========================================
-        #======================================================================================
+        #===========================================================================================================================
+        #=========================================================S3================================================================
+        #===========================================================================================================================
 
         # Define the Storage Bucket
         storage_bucket = aws_s3.Bucket(self, "StorageBucket", bucket_name="mlops-storage-bucket",
@@ -43,9 +43,9 @@ class StorageLayerStack(cdk.Stack):
                                        public_read_access=False, removal_policy=cdk.RemovalPolicy.DESTROY,
                                        versioned=False, encryption=aws_s3.BucketEncryption.S3_MANAGED)
         
-        #======================================================================================
-        #=========================================GLUE=========================================
-        #======================================================================================
+        #===========================================================================================================================
+        #=========================================================GLUE==============================================================
+        #===========================================================================================================================
         
         # Define Glue Database
         glue_database = aws_glue.Database(self, "GlueDatabase", database_name="mlops-glue-database")
@@ -94,7 +94,7 @@ class StorageLayerStack(cdk.Stack):
                                                         ],
                                                         resources=[
                                                             glue_database.catalog_arn,
-                                                            glue_database.database_arn
+                                                            glue_database.database_arn # TODO: Add tables arn
                                                             
                                                         ]
                                                     ),
@@ -118,7 +118,7 @@ class StorageLayerStack(cdk.Stack):
                                    default_arguments={"--additional-python-modules": "awswrangler"},
                                    description="Job used to convert data format from CSV to the Parquet",
                                    continuous_logging=aws_glue.ContinuousLoggingProps(enabled=True,
-                                                                                      log_group="/aws-glue/mlops-jobs/convert-job/")
+                                                                                      log_group="/aws-glue/mlops-jobs/convert-job/"),
                                    job_name="mlops-convert-job",
                                    worker_type=aws_glue.WorkerType.STANDARD,
                                    worker_count=1,
@@ -138,7 +138,7 @@ class StorageLayerStack(cdk.Stack):
                                    default_arguments={"--additional-python-modules": "awswrangler"},
                                    description="Job used to transform raw data into curated data",
                                    continuous_logging=aws_glue.ContinuousLoggingProps(enabled=True,
-                                                                                      log_group="/aws-glue/mlops-jobs/transform-job/")
+                                                                                      log_group="/aws-glue/mlops-jobs/transform-job/"),
                                    job_name="mlops-transform-job",
                                    worker_type=aws_glue.WorkerType.STANDARD,
                                    worker_count=1,
@@ -147,4 +147,9 @@ class StorageLayerStack(cdk.Stack):
                                        "Project":"BlackBelt",
                                        "Owner": "Tomislav Zupanovic" 
                                    })
+        
+        #===========================================================================================================================
+        #=======================================================STEP FUNCTIONS======================================================
+        #===========================================================================================================================
+        
         

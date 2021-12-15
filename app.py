@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 import os
-
 from aws_cdk import core as cdk
+from aws_black_belt_infrastructure.storage_layer_stack import StorageLayer
+from aws_black_belt_infrastructure.model_development_stack import ModelDevelopment
 
-
-from aws_black_belt_infrastructure.storage_layer_stack import StorageLayerStack
 
 # Initialize the CDK app
 app = cdk.App()
@@ -17,7 +16,8 @@ parameters = {"AccountId": "167321155121",
 environment = cdk.Environment(account=parameters["AccountId"], region=parameters["Region"])
 
 # Initialize the Stacks
-StorageLayerStack(app, "AwsBlackBeltInfrastructureStack", env=environment, parameters=parameters)
+StorageLayer(app, "StorageLayerStack", env=environment, parameters=parameters)
+ModelDevelopment(app, "ModelDevelopmentStack", env=environment, parameters=parameters)
 
 # Synth the CDK app
 app.synth()
