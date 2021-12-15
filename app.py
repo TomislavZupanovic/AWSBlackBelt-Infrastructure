@@ -3,32 +3,21 @@ import os
 
 from aws_cdk import core as cdk
 
-# For consistency with TypeScript code, `cdk` is the preferred import name for
-# the CDK's core module.  The following line also imports it as `core` for use
-# with examples from the CDK Developer's Guide, which are in the process of
-# being updated to use `cdk`.  You may delete this import if you don't need it.
-from aws_cdk import core
 
 from aws_black_belt_infrastructure.storage_layer_stack import StorageLayerStack
 
+# Initialize the CDK app
+app = cdk.App()
 
-app = core.App()
-StorageLayerStack(app, "AwsBlackBeltInfrastructureStack",
-    # If you don't specify 'env', this stack will be environment-agnostic.
-    # Account/Region-dependent features and context lookups will not work,
-    # but a single synthesized template can be deployed anywhere.
+# Define the Account parameters for Stacks
+parameters = {"AccountId": "167321155121",
+              "Region": "us-east-1"}
 
-    # Uncomment the next line to specialize this stack for the AWS Account
-    # and Region that are implied by the current CLI configuration.
+# Define the CDK Environment parameters
+environment = cdk.Environment(account=parameters["AccountId"], region=parameters["Region"])
 
-    #env=core.Environment(account=os.getenv('CDK_DEFAULT_ACCOUNT'), region=os.getenv('CDK_DEFAULT_REGION')),
+# Initialize the Stacks
+StorageLayerStack(app, "AwsBlackBeltInfrastructureStack", env=environment, parameters=parameters)
 
-    # Uncomment the next line if you know exactly what Account and Region you
-    # want to deploy the stack to. */
-
-    #env=core.Environment(account='123456789012', region='us-east-1'),
-
-    # For more information, see https://docs.aws.amazon.com/cdk/latest/guide/environments.html
-    )
-
+# Synth the CDK app
 app.synth()
