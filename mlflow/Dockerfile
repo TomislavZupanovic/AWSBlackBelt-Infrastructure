@@ -11,6 +11,6 @@ RUN pip install mlflow>=1.22.0 \
     && pip install boto3 
 
 ENTRYPOINT mlflow server \ 
-            --backend-store-uri postgresql://${DB_USERNAME}:${DB_PASSWORD}@${HOST}:5432/${DATABASE} \
-            --default-artifact-root s3://${BUCKET}/${TEAM} \
+            --backend-store-uri postgresql://${DB_USERNAME}:${DB_PASSWORD}@${HOST}:${PORT}/${DATABASE} \
+            --default-artifact-root s3://${BUCKET} \
             --host 0.0.0.0

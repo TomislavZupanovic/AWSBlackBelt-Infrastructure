@@ -250,7 +250,8 @@ class ModelDevelopment(Stack):
                                              environment={
                                                  "HOST": mlflow_db_endpoint.hostname,
                                                  "PORT": "5432",
-                                                 "DATABASE": mlflow_database_name
+                                                 "DATABASE": mlflow_database_name,
+                                                 "BUCKET": artifacts_bucket.bucket_name
                                              })
         
         # Define the Load Balanced Service for MLflow
