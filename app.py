@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import os
-from aws_cdk import core as cdk
+import aws_cdk as cdk
 from aws_black_belt_infrastructure.storage_layer_stack import StorageLayer
 from aws_black_belt_infrastructure.model_development_stack import ModelDevelopment
 

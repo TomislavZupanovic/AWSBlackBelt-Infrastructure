@@ -1,14 +1,16 @@
 from aws_cdk import (
-    core as cdk,
     aws_s3,
     aws_glue_alpha as aws_glue,
     aws_iam,
-    aws_ec2
+    aws_ec2,
+    RemovalPolicy,
+    Tags, Stack
 )
+from constructs import Construct
 
-class StorageLayer(cdk.Stack):
+class StorageLayer(Stack):
 
-    def __init__(self, scope: cdk.Construct, construct_id: str, parameters: dict, **kwargs) -> None:
+    def __init__(self, scope: Construct, construct_id: str, parameters: dict, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
         # Get Account environment parameters
@@ -16,8 +18,8 @@ class StorageLayer(cdk.Stack):
         region = parameters["Region"]
 
         # Define Tags for all resources (where they apply)
-        cdk.Tags.of(self).add("Project", "BlackBelt")
-        cdk.Tags.of(self).add("Owner", "Tomislav Zupanovic")
+        Tags.of(self).add("Project", "BlackBelt")
+        Tags.of(self).add("Owner", "Tomislav Zupanovic")
         
         #===========================================================================================================================
         #=========================================================VPC===============================================================
@@ -40,7 +42,7 @@ class StorageLayer(cdk.Stack):
         # Define the Storage Bucket
         storage_bucket = aws_s3.Bucket(self, "StorageBucket", bucket_name="mlops-storage-bucket",
                                        block_public_access=aws_s3.BlockPublicAccess.BLOCK_ALL,
-                                       public_read_access=False, removal_policy=cdk.RemovalPolicy.DESTROY,
+                                       public_read_access=False, removal_policy=RemovalPolicy.DESTROY,
                                        versioned=False, encryption=aws_s3.BucketEncryption.S3_MANAGED)
         
         #===========================================================================================================================
