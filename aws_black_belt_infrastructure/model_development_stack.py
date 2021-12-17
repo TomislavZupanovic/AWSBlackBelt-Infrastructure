@@ -402,7 +402,13 @@ class ModelDevelopment(Stack):
         
     def create_codebuild_project(self, git_branch: str, ecr_repo: aws_ecr.Repository,
                                  codebuild_role: aws_iam.Role, subnet: aws_ec2.SubnetSelection) -> aws_codebuild.Project:
-        """ Creates CodeBuild project for specific Git Branch on GitHub repository """
+        """ Creates CodeBuild project for specific Git Branch on GitHub repository
+            :argument: git_branch - Name of the Git branch to trigger the build
+            :argument: ecr_repo - ECR Repository to be used as target to push images
+            :argument: codebuild_role - AWS IAM Role used for CodeBuild permissions
+            :argument: subnet - VPC Subnets used to place CodeBuild project inside
+            :return: codebuild_project - AWS CodeBuild Project that will be created
+        """
         codebuild_project = aws_codebuild.Project(self, f"{git_branch}CodeBuildProject", allow_all_outbound=True,
                                 role=codebuild_role, vpc=self.vpc, security_groups=[self.outbound_security_group],
                                 subnet_selection=subnet, project_name=f"mlops-{git_branch}-codebuild",
