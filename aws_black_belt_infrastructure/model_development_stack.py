@@ -1,27 +1,31 @@
 from aws_cdk import (
     aws_s3,
-    aws_iam,
+    aws_iam, aws_logs,
     aws_ec2,
     aws_secretsmanager,
     aws_kms,
     aws_rds,
     aws_ecs,
     aws_ecs_patterns,
+    aws_lambda,
+    aws_ecr,
     aws_route53,
+    aws_codebuild,
     RemovalPolicy, Duration,
     Tags, Stack
 )
 from constructs import Construct
 
 class ModelDevelopment(Stack):
-
     def __init__(self, scope: Construct, construct_id: str, parameters: dict, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
         # Get Account environment parameters
-        account_id = parameters["AccountId"]
-        region = parameters["Region"]
-
+        self.account_id = parameters["AccountId"]
+        self.region = parameters["Region"]
+        self.vpc = None
+        self.outbound_security_group = None
+        
         # Define Tags for all resources (where they apply)
         Tags.of(self).add("Project", "BlackBelt")
         Tags.of(self).add("Owner", "Tomislav Zupanovic")
@@ -31,13 +35,13 @@ class ModelDevelopment(Stack):
         #===========================================================================================================================
 
         # Import VPC and subnets
-        vpc = aws_ec2.Vpc.from_lookup(self, "MainVPC", vpc_name="aast-innovation-vpc")
-        subnets = vpc.private_subnets
+        self.vpc = aws_ec2.Vpc.from_lookup(self, "MainVPC", vpc_name="aast-innovation-vpc")
+        subnets = self.vpc.private_subnets
         subnets_ids = [subnet.subnet_id for subnet in subnets]
         
         # Define Security Group with allowed outbound traffic
-        outbound_security_group = aws_ec2.SecurityGroup(self, "OutboundSecurityGroup",
-                                                        vpc=vpc, description="Allow all outbound access only",
+        self.outbound_security_group = aws_ec2.SecurityGroup(self, "OutboundSecurityGroup",
+                                                        vpc=self.vpc, description="Allow all outbound access only",
                                                         allow_all_outbound=True)
 
         #===========================================================================================================================
@@ -85,7 +89,7 @@ class ModelDevelopment(Stack):
         
         # Define Security group for serverless Aurora
         aurora_security_group = aws_ec2.SecurityGroup(self, "AuroraSecurityGroup",
-                                                      vpc=vpc, description="Security group used for connecting to MLflow Database backend",
+                                                      vpc=self.vpc, description="Security group used for connecting to MLflow Database backend",
                                                       allow_all_outbound=True)
         
         aurora_security_group.add_ingress_rule(aws_ec2.Peer.ipv4("0.0.0.0/0"),  # TODO: Restrict IP range
@@ -97,7 +101,7 @@ class ModelDevelopment(Stack):
                                                       engine=aws_rds.DatabaseClusterEngine.aurora_postgres(
                                                           version=aws_rds.AuroraPostgresEngineVersion.VER_10_4),
                                                       credentials=aws_rds.Credentials.from_secret(mlflow_db_secret),
-                                                      vpc=vpc,
+                                                      vpc=self.vpc,
                                                       vpc_subnets=aws_ec2.SubnetSelection(
                                                           one_per_az=True,
                                                           subnet_type=aws_ec2.SubnetType.PRIVATE_WITH_NAT  # TODO: Double-check
@@ -114,7 +118,7 @@ class ModelDevelopment(Stack):
         
         # Define the Fargate Cluster
         fargate_cluster = aws_ecs.Cluster(self, "FargateCluster", cluster_name="mlops-fargate-cluster",
-                                          enable_fargate_capacity_providers=True, vpc=vpc, container_insights=True)
+                                          enable_fargate_capacity_providers=True, vpc=self.vpc, container_insights=True)
         
         # Define Fargate Policy
         fargate_policy = aws_iam.ManagedPolicy(self, "FargatePolicy", description="Used for Fargate Cluster",
@@ -214,7 +218,7 @@ class ModelDevelopment(Stack):
                                     managed_policies=[fargate_policy])
         
         # Define Security Group for Fargate Cluster
-        fargate_security_group = aws_ec2.SecurityGroup(self, "FargateSecurityGroup", vpc=vpc,
+        fargate_security_group = aws_ec2.SecurityGroup(self, "FargateSecurityGroup", vpc=self.vpc,
                                                        description="Security Group used for connecting to MLflow and Grafana servers",
                                                        allow_all_outbound=True)
         fargate_security_group.add_ingress_rule(aws_ec2.Peer.ipv4("0.0.0.0/0"), aws_ec2.Port.tcp(5000),
@@ -230,7 +234,7 @@ class ModelDevelopment(Stack):
         
         # Define Route53 Hosted Zone
         hosted_zone = aws_route53.HostedZone(self, "Route53HostedZone",
-                                             vpcs=[vpc], zone_name="aast-innovation.iolap.com")
+                                             vpcs=[self.vpc], zone_name="aast-innovation.iolap.com")
         
         # Define Mlflow Task Definition
         mlflow_task_definition = aws_ecs.FargateTaskDefinition(self, "MLflowTaskDefinition", cpu=1024, ephemeral_storage_gib=30,
@@ -273,5 +277,153 @@ class ModelDevelopment(Stack):
         mlflow_load_balanced_service.load_balancer.add_security_group(fargate_security_group)
         
         #===========================================================================================================================
+        #=========================================================CI/CD============================================================
+        #===========================================================================================================================
+        
+        # Define the ECR Repository to contain all project images
+        ecr_repository = aws_ecr.Repository(self, "ECRRepository",
+                                            repository_name="mlops-image-repository",
+                                            removal_policy=RemovalPolicy.DESTROY)
+        
+        # Define CodeBuild policy
+        codebuild_policy = aws_iam.ManagedPolicy(self, "CodeBuildPolicy", description="Used for Codebuild to create and push images to ECR",
+                                               managed_policy_name="mlops-codebuild-policy",
+                                               statements=[
+                                                   aws_iam.PolicyStatement(
+                                                        sid="CloudWatchLogsAccess",
+                                                        effect=aws_iam.Effect.ALLOW,
+                                                        actions=[
+                                                            "logs:CreateLogGroup",
+                                                            "logs:PutLogEvents",
+                                                            "logs:CreateLogStream"
+                                                        ],
+                                                        resources=[
+                                                            f"arn:aws:logs:{self.region}:{self.account_id}:log-group:/aws/codebuild/*"
+                                                        ]
+                                                    ),
+                                                    aws_iam.PolicyStatement(
+                                                        sid="ECRReadAccess",
+                                                        effect=aws_iam.Effect.ALLOW,
+                                                        actions=[
+                                                            "ecr:BatchCheckLayerAvailability",
+                                                            "ecr:CompleteLayerUpload",
+                                                            "ecr:GetAuthorizationToken",
+                                                            "ecr:InitiateLayerUpload",
+                                                            "ecr:PutImage",
+                                                            "ecr:UploadLayerPart"
+                                                        ],
+                                                        resources=[
+                                                            ecr_repository.repository_arn
+                                                        ]
+                                                    ),
+                                               ]
+                                            )
+        
+        # Define CodeBuild Role
+        codebuild_role = aws_iam.Role(self, "CodeBuildRole", role_name="mlops-codebuild-role",
+                                    assumed_by=aws_iam.ServicePrincipal("codebuild.amazonaws.com"),
+                                    managed_policies=[codebuild_policy])
+        
+        # Define the CodeBuild Projects for Training and Inference branches
+        subnet_selection = aws_ec2.SubnetSelection(one_per_az=True,
+                                                   subnet_type=aws_ec2.SubnetType.PRIVATE_WITH_NAT)
+        
+        training_project = self.create_codebuild_project(git_branch="training", ecr_repo=ecr_repository,
+                                                         codebuild_role=codebuild_role, subnet=subnet_selection)
+        
+        inference_project = self.create_codebuild_project(git_branch="inference", ecr_repo=ecr_repository,
+                                                         codebuild_role=codebuild_role, subnet=subnet_selection)
+        
+        #===========================================================================================================================
         #=========================================================LAMBDA============================================================
         #===========================================================================================================================
+        
+        # Define the Lambda Policy
+        lambda_policy = aws_iam.ManagedPolicy(self, "LambdaPolicy", description="Used for Fargate Cluster",
+                                               managed_policy_name="mlops-fargate-policy",
+                                               statements=[
+                                                   aws_iam.PolicyStatement(
+                                                        sid="CloudWatchLogsAccess",
+                                                        effect=aws_iam.Effect.ALLOW,
+                                                        actions=[
+                                                            "logs:CreateLogGroup",
+                                                            "logs:PutLogEvents",
+                                                            "logs:CreateLogStream"
+                                                        ],
+                                                        resources=[
+                                                            f"arn:aws:logs:{self.region}:{self.account_id}:log-group:/aws/lambda/*"
+                                                        ]
+                                                    ),
+                                                    aws_iam.PolicyStatement(
+                                                        sid="VPCAccessPolicy",
+                                                        effect=aws_iam.Effect.ALLOW,
+                                                        actions=[
+                                                            "ec2:CreateNetworkInterface",
+                                                            "ec2:DescribeDhcpOptions",
+                                                            "ec2:DescribeNetworkInterfaces",
+                                                            "ec2:DeleteNetworkInterface",
+                                                            "ec2:DescribeSubnets",
+                                                            "ec2:DescribeSecurityGroups",
+                                                            "ec2:DescribeVpcs"
+                                                        ],
+                                                        resources=[
+                                                            "*"
+                                                        ]
+                                                    ),
+                                                    aws_iam.PolicyStatement(
+                                                        sid="ECRReadAccess",
+                                                        effect=aws_iam.Effect.ALLOW,
+                                                        actions=[
+                                                            "ecr:DescribeImages",
+                                                            "ecr:DescribeRepositories",
+                                                            "ecr:BatchGetImage",
+                                                            "ecr:GetDownloadUrlForLayer",
+                                                        ],
+                                                        resources=[
+                                                            "*"
+                                                        ]
+                                                    ),
+                                                    aws_iam.PolicyStatement(
+                                                        sid="SagemakerAccess",
+                                                        effect=aws_iam.Effect.ALLOW,
+                                                        actions=[
+                                                            "sagemaker:*TransformJob",
+                                                            "sagemaker:*TransformJobs",
+                                                            "sagemaker:*ProcessingJob",
+                                                            "sagemaker:*ProcessingJobs",
+                                                            "iam:PassRole",
+                                                        ],
+                                                        resources=[
+                                                            "*"
+                                                        ]
+                                                    ),
+                                               ]
+                                            )
+        
+    def create_codebuild_project(self, git_branch: str, ecr_repo: aws_ecr.Repository,
+                                 codebuild_role: aws_iam.Role, subnet: aws_ec2.SubnetSelection) -> aws_codebuild.Project:
+        """ Creates CodeBuild project for specific Git Branch on GitHub repository """
+        codebuild_project = aws_codebuild.Project(self, f"{git_branch}CodeBuildProject", allow_all_outbound=True,
+                                role=codebuild_role, vpc=self.vpc, security_groups=[self.outbound_security_group],
+                                subnet_selection=subnet, project_name=f"mlops-{git_branch}-codebuild",
+                                environment=aws_codebuild.BuildEnvironment(
+                                    privileged=True,
+                                    build_image=aws_codebuild.LinuxBuildImage.from_code_build_image_id("aws/codebuild/amazonlinux2-x86_64-standard:3.0")
+                                ),
+                                environment_variables={
+                                    "AWS_DEFAULT_REGION": aws_codebuild.BuildEnvironmentVariable(value=self.region),
+                                    "AWS_ACCOUNT_ID": aws_codebuild.BuildEnvironmentVariable(value=self.account_id),
+                                    "IMAGE_REPO_NAME": aws_codebuild.BuildEnvironmentVariable(value=ecr_repo.repository_name),
+                                    "IMAGE_TAG": aws_codebuild.BuildEnvironmentVariable(value=git_branch),
+                                },
+                                logging=aws_codebuild.LoggingOptions(cloud_watch=aws_codebuild.CloudWatchLoggingOptions(
+                                    log_group=aws_logs.LogGroup(self, f"{git_branch}CodeBuildLogGroup",
+                                                                log_group_name=f"/aws/codebuild/{git_branch}",
+                                                                removal_policy=RemovalPolicy.DESTROY,
+                                                                retention=aws_logs.RetentionDays.ONE_WEEK)
+                                )), description=f"CodeBuild used to create and push {git_branch} images",
+                                source=aws_codebuild.Source.git_hub(owner="TomislavZupanovic", repo="AWSBlackBelt-Capstone",
+                                                                    branch_or_ref=git_branch, webhook=True,
+                                                                    identifier=f"{git_branch} branch source")
+                                )
+        return codebuild_project
