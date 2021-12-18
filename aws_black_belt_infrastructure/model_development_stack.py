@@ -10,11 +10,12 @@ from aws_cdk import (
     aws_lambda,
     aws_ecr,
     aws_route53,
-    aws_codebuild,
+    aws_codebuild, aws_apigateway,
     RemovalPolicy, Duration,
     Tags, Stack
 )
 from constructs import Construct
+import constructs
 
 class ModelDevelopment(Stack):
     def __init__(self, scope: Construct, construct_id: str, parameters: dict, **kwargs) -> None:
@@ -25,6 +26,8 @@ class ModelDevelopment(Stack):
         self.region = parameters["Region"]
         self.vpc = None
         self.outbound_security_group = None
+        self.vpc_endpoint_id = parameters["VPCEndpointId"]
+        self.vpc_security_group_id = parameters["VPCSecurityGroupId"]
         
         # Define Tags for all resources (where they apply)
         Tags.of(self).add("Project", "BlackBelt")
@@ -43,6 +46,17 @@ class ModelDevelopment(Stack):
         self.outbound_security_group = aws_ec2.SecurityGroup(self, "OutboundSecurityGroup",
                                                         vpc=self.vpc, description="Allow all outbound access only",
                                                         allow_all_outbound=True)
+        
+        # Import VPC Endpoint Security Group
+        vpc_endpoint_security_group = aws_ec2.SecurityGroup.from_security_group_id(
+            self, "VPCEndpointSecurityGroupImport", security_group_id=self.vpc_security_group_id
+        )
+        
+        # Import VPC Endpoint for API Gateway
+        vpc_endpoint = aws_ec2.InterfaceVpcEndpoint.from_interface_vpc_endpoint_attributes(
+            self, "VPCEndpointImport", port=443, vpc_endpoint_id=self.vpc_endpoint_id,
+            security_groups=[vpc_endpoint_security_group]
+        )
 
         #===========================================================================================================================
         #=========================================================S3================================================================
@@ -324,22 +338,79 @@ class ModelDevelopment(Stack):
                                     assumed_by=aws_iam.ServicePrincipal("codebuild.amazonaws.com"),
                                     managed_policies=[codebuild_policy])
         
-        # Define the CodeBuild Projects for Training and Inference branches
+        # Define Subnet Selection for CodeBuild
         subnet_selection = aws_ec2.SubnetSelection(one_per_az=True,
                                                    subnet_type=aws_ec2.SubnetType.PRIVATE_WITH_NAT)
         
-        training_project = self.create_codebuild_project(git_branch="training", ecr_repo=ecr_repository,
-                                                         codebuild_role=codebuild_role, subnet=subnet_selection)
+        # Define the CodeBuild Project for GitHub Repository
+        codebuild_project = aws_codebuild.Project(self, "CodeBuildProject", allow_all_outbound=True,
+                                role=codebuild_role, vpc=self.vpc, security_groups=[self.outbound_security_group],
+                                subnet_selection=subnet_selection, project_name=f"mlops-codebuild-project",
+                                environment=aws_codebuild.BuildEnvironment(
+                                    privileged=True,
+                                    build_image=aws_codebuild.LinuxBuildImage.from_code_build_image_id("aws/codebuild/amazonlinux2-x86_64-standard:3.0")
+                                ),
+                                environment_variables={
+                                    "AWS_DEFAULT_REGION": aws_codebuild.BuildEnvironmentVariable(value=self.region),
+                                    "AWS_ACCOUNT_ID": aws_codebuild.BuildEnvironmentVariable(value=self.account_id),
+                                    "IMAGE_REPO_NAME": aws_codebuild.BuildEnvironmentVariable(value=ecr_repository.repository_name),
+                                },
+                                logging=aws_codebuild.LoggingOptions(cloud_watch=aws_codebuild.CloudWatchLoggingOptions(
+                                    log_group=aws_logs.LogGroup(self, "CodeBuildLogGroup",
+                                                                log_group_name=f"/aws/codebuild/mlops",
+                                                                removal_policy=RemovalPolicy.DESTROY,
+                                                                retention=aws_logs.RetentionDays.ONE_WEEK)
+                                )), description=f"CodeBuild used to create and push ML images",
+                                source=aws_codebuild.Source.git_hub(owner="TomislavZupanovic", repo="AWSBlackBelt-Capstone",
+                                                                    branch_or_ref="main", webhook=True,
+                                                                    identifier=f"codebuild-github-source"))
         
-        inference_project = self.create_codebuild_project(git_branch="inference", ecr_repo=ecr_repository,
-                                                         codebuild_role=codebuild_role, subnet=subnet_selection)
+        #===========================================================================================================================
+        #=========================================================SAGEMAKER=========================================================
+        #===========================================================================================================================
+        
+        # Define Sagemaker policy
+        sagemaker_policy = aws_iam.ManagedPolicy(self, "SagemakerPolicy", description="Used for Sagemaker Processing Job",
+                                               managed_policy_name="mlops-sagemaker-policy",
+                                               statements=[
+                                                   aws_iam.PolicyStatement(
+                                                        sid="CloudWatchLogsAccess",
+                                                        effect=aws_iam.Effect.ALLOW,
+                                                        actions=[
+                                                            "logs:CreateLogGroup",
+                                                            "logs:PutLogEvents",
+                                                            "logs:CreateLogStream"
+                                                        ],
+                                                        resources=[
+                                                            "*"
+                                                        ]
+                                                    ),
+                                                    aws_iam.PolicyStatement(
+                                                        sid="S3BucketAccess",
+                                                        effect=aws_iam.Effect.ALLOW,
+                                                        actions=[
+                                                            "s3:*"
+                                                        ],
+                                                        resources=[
+                                                            artifacts_bucket.bucket_arn,
+                                                            artifacts_bucket.bucket_arn + "/*"
+                                                        ]
+                                                    ),
+                                               ]
+                                            )
+        
+        # Define the Sagemaker Role
+        sagemaker_role = aws_iam.Role(self, "SagemakerRole", role_name="mlops-sagemaker-role",
+                                    assumed_by=aws_iam.ServicePrincipal("sagemaker.amazonaws.com"),
+                                    managed_policies=[aws_iam.ManagedPolicy.from_aws_managed_policy_name("AmazonSageMakerFullAccess"),
+                                                      sagemaker_policy])
         
         #===========================================================================================================================
         #=========================================================LAMBDA============================================================
         #===========================================================================================================================
         
         # Define the Lambda Policy
-        lambda_policy = aws_iam.ManagedPolicy(self, "LambdaPolicy", description="Used for Fargate Cluster",
+        lambda_policy = aws_iam.ManagedPolicy(self, "LambdaPolicy", description="Used for Lambdas permissions",
                                                managed_policy_name="mlops-fargate-policy",
                                                statements=[
                                                    aws_iam.PolicyStatement(
@@ -380,7 +451,7 @@ class ModelDevelopment(Stack):
                                                             "ecr:GetDownloadUrlForLayer",
                                                         ],
                                                         resources=[
-                                                            "*"
+                                                            ecr_repository.repository_arn
                                                         ]
                                                     ),
                                                     aws_iam.PolicyStatement(
@@ -400,36 +471,94 @@ class ModelDevelopment(Stack):
                                                ]
                                             )
         
-    def create_codebuild_project(self, git_branch: str, ecr_repo: aws_ecr.Repository,
-                                 codebuild_role: aws_iam.Role, subnet: aws_ec2.SubnetSelection) -> aws_codebuild.Project:
-        """ Creates CodeBuild project for specific Git Branch on GitHub repository
-            :argument: git_branch - Name of the Git branch to trigger the build
-            :argument: ecr_repo - ECR Repository to be used as target to push images
-            :argument: codebuild_role - AWS IAM Role used for CodeBuild permissions
-            :argument: subnet - VPC Subnets used to place CodeBuild project inside
-            :return: codebuild_project - AWS CodeBuild Project that will be created
-        """
-        codebuild_project = aws_codebuild.Project(self, f"{git_branch}CodeBuildProject", allow_all_outbound=True,
-                                role=codebuild_role, vpc=self.vpc, security_groups=[self.outbound_security_group],
-                                subnet_selection=subnet, project_name=f"mlops-{git_branch}-codebuild",
-                                environment=aws_codebuild.BuildEnvironment(
-                                    privileged=True,
-                                    build_image=aws_codebuild.LinuxBuildImage.from_code_build_image_id("aws/codebuild/amazonlinux2-x86_64-standard:3.0")
-                                ),
-                                environment_variables={
-                                    "AWS_DEFAULT_REGION": aws_codebuild.BuildEnvironmentVariable(value=self.region),
-                                    "AWS_ACCOUNT_ID": aws_codebuild.BuildEnvironmentVariable(value=self.account_id),
-                                    "IMAGE_REPO_NAME": aws_codebuild.BuildEnvironmentVariable(value=ecr_repo.repository_name),
-                                    "IMAGE_TAG": aws_codebuild.BuildEnvironmentVariable(value=git_branch),
-                                },
-                                logging=aws_codebuild.LoggingOptions(cloud_watch=aws_codebuild.CloudWatchLoggingOptions(
-                                    log_group=aws_logs.LogGroup(self, f"{git_branch}CodeBuildLogGroup",
-                                                                log_group_name=f"/aws/codebuild/{git_branch}",
-                                                                removal_policy=RemovalPolicy.DESTROY,
-                                                                retention=aws_logs.RetentionDays.ONE_WEEK)
-                                )), description=f"CodeBuild used to create and push {git_branch} images",
-                                source=aws_codebuild.Source.git_hub(owner="TomislavZupanovic", repo="AWSBlackBelt-Capstone",
-                                                                    branch_or_ref=git_branch, webhook=True,
-                                                                    identifier=f"{git_branch} branch source")
-                                )
-        return codebuild_project
+        # Define Lambda Role
+        lambda_role = aws_iam.Role(self, "LambdaRole", role_name="mlops-lambda-role",
+                                    assumed_by=aws_iam.ServicePrincipal("lambda.amazonaws.com"),
+                                    managed_policies=[lambda_policy])
+        
+        # Define Lambda function
+        training_lambda = aws_lambda.Function(self, "TrainingLambda", role=lambda_role,
+                                              runtime=aws_lambda.Runtime.PYTHON_3_8,
+                                              handler="training_lambda.lambda_handler",
+                                              vpc=self.vpc, vpc_subnets=aws_ec2.SubnetType.PRIVATE_WITH_NAT,
+                                              security_groups=[self.outbound_security_group],
+                                              code=aws_lambda.Code.from_asset("lambda_code/training_lambda"),
+                                              environment={
+                                                        "SagemakerRoleArn": sagemaker_role.role_arn,
+                                                        "ImageUri": ecr_repository.repository_uri,
+                                                        "SecurityGroupId": self.outbound_security_group.security_group_id,
+                                                        "Subnet0": subnets_ids[0],
+                                                        "Subnet1": subnets_ids[1],
+                                                        "Subnet2": subnets_ids[2],
+                                                        "Subnet3": subnets_ids[3],
+                                                  },
+                                              timeout=Duration.minutes(5), 
+                                              function_name="mlops-training-lambda",
+                                              description="Used for starting the model training, invoked through API or Event Rule")
+        
+        #===========================================================================================================================
+        #=========================================================APIGATEWAY========================================================
+        #===========================================================================================================================
+        
+        # Define API Gateway Policy
+        api_policy = aws_iam.PolicyDocument(
+                statements=[
+                    aws_iam.PolicyStatement(
+                            sid="InvokeLambda",
+                            effect=aws_iam.Effect.ALLOW,
+                            actions=[
+                                "lambda:InvokeFunction",
+                            ],
+                            resources=[
+                                training_lambda.function_arn
+                            ],
+                            principals=[aws_iam.AnyPrincipal()]
+                    ),
+                    aws_iam.PolicyStatement(
+                            sid="AllowFromVPCLocations",
+                            effect=aws_iam.Effect.ALLOW,
+                            actions=[
+                                "execute-api:Invoke",
+                            ],
+                            resources=[
+                                "execute-api:/*"
+                            ],
+                            principals=[aws_iam.AnyPrincipal()]
+                    ),
+                    aws_iam.PolicyStatement(
+                            sid="DenyFromNonVPCLocations",
+                            effect=aws_iam.Effect.DENY,
+                            actions=[
+                                "execute-api:Invoke",
+                            ],
+                            resources=[
+                                "execute-api:/*"
+                            ],
+                            principals=[aws_iam.AnyPrincipal()],
+                            conditions={
+                                "StringNotEquals": {
+                                    "aws:sourceVpc": self.vpc.vpc_id
+                                }
+                            }
+                    ),
+                ])
+        
+        # Define API Gateway with VPC Endpoint
+        development_api = aws_apigateway.RestApi(self, "DevelopmentAPI", rest_api_name="mlops-development-api",
+                                                 description="API used to start training and define training schedule",
+                                                 policy=api_policy, deploy=True,
+                                                 deploy_options=aws_apigateway.StageOptions(stage_name="prod"),
+                                                 endpoint_configuration=aws_apigateway.EndpointConfiguration(
+                                                     types=[aws_apigateway.EndpointType.PRIVATE],
+                                                     vpc_endpoint=[vpc_endpoint]
+                                                 ))
+        
+        # Define Integration Lambda with API Gateway
+        training_integration = aws_apigateway.LambdaIntegration(training_lambda)
+        
+        # Define the API Resources and methods
+        train_resource = development_api.root.add_resource("start_training")
+        train_resource.add_method("PUT", training_integration)
+        
+        schedule_resource = development_api.root.add_resource("training_schedule")
+        schedule_resource.add_method("PUT", training_integration)

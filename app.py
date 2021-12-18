@@ -10,7 +10,9 @@ app = cdk.App()
 
 # Define the Account parameters for Stacks
 parameters = {"AccountId": "167321155121",
-              "Region": "us-east-1"}
+              "Region": "us-east-1",
+              "VPCEndpointId": "vpce-0a7e4031f9928bdbc",
+              "VPCSecurityGroupId": "sg-00068c8858ad5df0b"}
 
 # Define the CDK Environment parameters
 environment = cdk.Environment(account=parameters["AccountId"], region=parameters["Region"])
