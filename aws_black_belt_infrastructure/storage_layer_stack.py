@@ -1,7 +1,8 @@
 from aws_cdk import (
+    aws_kms,
     aws_s3,
     aws_glue_alpha as aws_glue,
-    aws_iam,
+    aws_iam, aws_secretsmanager,
     aws_ec2, aws_rds,
     aws_lambda, aws_s3_notifications,
     aws_stepfunctions_tasks, aws_stepfunctions,
@@ -312,6 +313,24 @@ class StorageLayer(Stack):
                                               aws_s3.NotificationKeyFilter(prefix="curated/parquet/"))
         
         #===========================================================================================================================
+        #=======================================================KMS & SECRET==============================================================
+        #===========================================================================================================================
+        
+        # Import KMS key
+        kms_key = aws_kms.Key.from_key_arn(self, "ImportedKMSKey", key_arn=Fn.import_value("KMSKeyARN"))
+        
+        # Define the Secret for LakeFS Aurora DB
+        lakefs_db_secret = aws_secretsmanager.Secret(self, "LakeFSDBSecret", encryption_key=kms_key,
+                                                     description="Secret used for connecting to the LakeFS PostgreSQL database",
+                                                     secret_name="mlops-lakefs-db-secret",
+                                                     removal_policy=RemovalPolicy.DESTROY,
+                                                     generate_secret_string=aws_secretsmanager.SecretStringGenerator(
+                                                         generate_string_key="password",
+                                                         secret_string_template="{\"username\":\"lakefs-user\"}"
+                                                     ))
+        
+        
+        #===========================================================================================================================
         #=======================================================AURORA==============================================================
         #===========================================================================================================================
         
@@ -330,6 +349,10 @@ class StorageLayer(Stack):
                                                       ),
                                                       security_groups=[aurora_security_group],
                                                       default_database_name='LakeFS',
-                                                      cluster_identifier="mlops-lakefs-backend")
+                                                      cluster_identifier="mlops-lakefs")
         # Define the LakeFS DB endpoint
         lakefs_db_endpoint = lakefs_backend_db.cluster_endpoint
+        
+        #===========================================================================================================================
+        #=======================================================FARGATE=============================================================
+        #===========================================================================================================================

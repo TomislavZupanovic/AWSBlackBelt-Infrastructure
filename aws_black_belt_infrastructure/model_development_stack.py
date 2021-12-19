@@ -74,7 +74,7 @@ class ModelDevelopment(Stack):
         #===========================================================================================================================
         
         # Define the KMS key for Secret Encryption/Decryption
-        mlflow_key = aws_kms.Key(self, "MLflowDBSecretKey", description="Key used for MLflow DB Secret",
+        kms_key = aws_kms.Key(self, "MLflowDBSecretKey", description="Key used for MLflow DB Secret",
                                  enabled=True, enable_key_rotation=False,
                                  policy=aws_iam.PolicyDocument(
                                             statements=[aws_iam.PolicyStatement(
@@ -89,7 +89,7 @@ class ModelDevelopment(Stack):
                                             )]), removal_policy=RemovalPolicy.DESTROY)
         
         # Define the Secret for MLflow Aurora DB
-        mlflow_db_secret = aws_secretsmanager.Secret(self, "MLflowDBSecret", encryption_key=mlflow_key,
+        mlflow_db_secret = aws_secretsmanager.Secret(self, "MLflowDBSecret", encryption_key=kms_key,
                                                      description="Secret used for connecting to the MLflow PostgreSQL database",
                                                      secret_name="mlops-mlflow-db-secret",
                                                      removal_policy=RemovalPolicy.DESTROY,
@@ -108,7 +108,7 @@ class ModelDevelopment(Stack):
                                                       allow_all_outbound=True, security_group_name="mlops-aurora-security-group")
         
         aurora_security_group.add_ingress_rule(aws_ec2.Peer.ipv4("0.0.0.0/0"),  # TODO: Restrict IP range
-                                               aws_ec2.Port.tcp(5432), "Allow access from VPC")
+                                               aws_ec2.Port.tcp(5432), "Allow access from VPC to the Database")
         
         # Define Serverless Aurora for MLflow backend
         mlflow_database_name = "MLflowBackend"
@@ -122,7 +122,7 @@ class ModelDevelopment(Stack):
                                                       ),
                                                       security_groups=[aurora_security_group],
                                                       default_database_name=mlflow_database_name,
-                                                      cluster_identifier="mlops-mlflow-backend")
+                                                      cluster_identifier="mlops-mlflow")
         # Define the MLflow DB endpoint
         mlflow_db_endpoint = mlflow_backend_db.cluster_endpoint
         
@@ -157,7 +157,7 @@ class ModelDevelopment(Stack):
                                                             "secretsmanager:*"
                                                         ],
                                                         resources=[
-                                                            mlflow_db_secret.secret_arn
+                                                            "*"
                                                         ]
                                                     ),
                                                     aws_iam.PolicyStatement(
@@ -234,7 +234,7 @@ class ModelDevelopment(Stack):
         # Define Security Group for Fargate Cluster
         fargate_security_group = aws_ec2.SecurityGroup(self, "FargateSecurityGroup", vpc=self.vpc,
                                                        description="Security Group used for connecting to MLflow and Grafana servers",
-                                                       allow_all_outbound=True)
+                                                       allow_all_outbound=True, security_group_name="mlops-fargate-security-group")
         fargate_security_group.add_ingress_rule(aws_ec2.Peer.ipv4("0.0.0.0/0"), aws_ec2.Port.tcp(5000),
                                                 "Allow access from VPC for the MLflow")
         fargate_security_group.add_ingress_rule(aws_ec2.Peer.ipv4("0.0.0.0/0"), aws_ec2.Port.tcp(3000),
@@ -574,3 +574,7 @@ class ModelDevelopment(Stack):
         CfnOutput(self, "AuroraSecurityGroupExport", description="ID of the Aurora Security Group",
                   value=aurora_security_group.security_group_id,
                   export_name="AuroraSecurityGroupId")
+        
+        CfnOutput(self, "KMSKeyARN", description="ARN of the KMS Key",
+                  value=kms_key.key_arn,
+                  export_name="KMSKeyARN")
