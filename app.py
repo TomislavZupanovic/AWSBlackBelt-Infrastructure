@@ -9,7 +9,8 @@ from aws_black_belt_infrastructure.model_development_stack import ModelDevelopme
 app = cdk.App()
 
 # Define the Account parameters for Stacks
-parameters = {"AccountId": "167321155121",
+parameters = {"Owner": "Tomislav Zupanovic",
+              "AccountId": "167321155121",
               "Region": "us-east-1",
               "VPCEndpointId": "vpce-0a7e4031f9928bdbc",
               "VPCSecurityGroupId": "sg-00068c8858ad5df0b"}
@@ -18,8 +19,8 @@ parameters = {"AccountId": "167321155121",
 environment = cdk.Environment(account=parameters["AccountId"], region=parameters["Region"])
 
 # Initialize the Stacks
-StorageLayer(app, "StorageLayerStack", env=environment, parameters=parameters)
 ModelDevelopment(app, "ModelDevelopmentStack", env=environment, parameters=parameters)
+StorageLayer(app, "StorageLayerStack", env=environment, parameters=parameters)
 
 # Synth the CDK app
 app.synth()

@@ -12,7 +12,7 @@ from aws_cdk import (
     aws_route53,
     aws_codebuild, aws_apigateway,
     RemovalPolicy, Duration,
-    Tags, Stack
+    Tags, Stack, CfnOutput
 )
 from constructs import Construct
 import constructs
@@ -28,10 +28,11 @@ class ModelDevelopment(Stack):
         self.outbound_security_group = None
         self.vpc_endpoint_id = parameters["VPCEndpointId"]
         self.vpc_security_group_id = parameters["VPCSecurityGroupId"]
+        self.owner = parameters["Owner"]
         
         # Define Tags for all resources (where they apply)
         Tags.of(self).add("Project", "BlackBelt")
-        Tags.of(self).add("Owner", "Tomislav Zupanovic")
+        Tags.of(self).add("Owner", self.owner)
         
         #===========================================================================================================================
         #=========================================================VPC===============================================================
@@ -45,7 +46,7 @@ class ModelDevelopment(Stack):
         # Define Security Group with allowed outbound traffic
         self.outbound_security_group = aws_ec2.SecurityGroup(self, "OutboundSecurityGroup",
                                                         vpc=self.vpc, description="Allow all outbound access only",
-                                                        allow_all_outbound=True)
+                                                        allow_all_outbound=True, security_group_name="mlops-security-group")
         
         # Import VPC Endpoint Security Group
         vpc_endpoint_security_group = aws_ec2.SecurityGroup.from_security_group_id(
@@ -104,7 +105,7 @@ class ModelDevelopment(Stack):
         # Define Security group for serverless Aurora
         aurora_security_group = aws_ec2.SecurityGroup(self, "AuroraSecurityGroup",
                                                       vpc=self.vpc, description="Security group used for connecting to MLflow Database backend",
-                                                      allow_all_outbound=True)
+                                                      allow_all_outbound=True, security_group_name="mlops-aurora-security-group")
         
         aurora_security_group.add_ingress_rule(aws_ec2.Peer.ipv4("0.0.0.0/0"),  # TODO: Restrict IP range
                                                aws_ec2.Port.tcp(5432), "Allow access from VPC")
@@ -112,8 +113,7 @@ class ModelDevelopment(Stack):
         # Define Serverless Aurora for MLflow backend
         mlflow_database_name = "MLflowBackend"
         mlflow_backend_db = aws_rds.ServerlessCluster(self, "MLflowBackendDB",
-                                                      engine=aws_rds.DatabaseClusterEngine.aurora_postgres(
-                                                          version=aws_rds.AuroraPostgresEngineVersion.VER_10_4),
+                                                      engine=aws_rds.DatabaseClusterEngine.AURORA_POSTGRESQL,
                                                       credentials=aws_rds.Credentials.from_secret(mlflow_db_secret),
                                                       vpc=self.vpc,
                                                       vpc_subnets=aws_ec2.SubnetSelection(
@@ -410,8 +410,8 @@ class ModelDevelopment(Stack):
         #===========================================================================================================================
         
         # Define the Lambda Policy
-        lambda_policy = aws_iam.ManagedPolicy(self, "LambdaPolicy", description="Used for Lambdas permissions",
-                                               managed_policy_name="mlops-fargate-policy",
+        lambda_policy = aws_iam.ManagedPolicy(self, "LambdaPolicy", description="Used for Training Lambda permissions",
+                                               managed_policy_name="mlops-training-lambda-policy",
                                                statements=[
                                                    aws_iam.PolicyStatement(
                                                         sid="CloudWatchLogsAccess",
@@ -472,7 +472,7 @@ class ModelDevelopment(Stack):
                                             )
         
         # Define Lambda Role
-        lambda_role = aws_iam.Role(self, "LambdaRole", role_name="mlops-lambda-role",
+        lambda_role = aws_iam.Role(self, "LambdaRole", role_name="mlops-training-lambda-role",
                                     assumed_by=aws_iam.ServicePrincipal("lambda.amazonaws.com"),
                                     managed_policies=[lambda_policy])
         
@@ -562,3 +562,15 @@ class ModelDevelopment(Stack):
         
         schedule_resource = development_api.root.add_resource("training_schedule")
         schedule_resource.add_method("PUT", training_integration)
+        
+        #===========================================================================================================================
+        #=========================================================STACK EXPORTS=====================================================
+        #===========================================================================================================================
+        
+        CfnOutput(self, "SecuritGroupExport", description="ID of the Security Group",
+                  value=self.outbound_security_group.security_group_id,
+                  export_name="SecurityGroupId")
+        
+        CfnOutput(self, "AuroraSecurityGroupExport", description="ID of the Aurora Security Group",
+                  value=aurora_security_group.security_group_id,
+                  export_name="AuroraSecurityGroupId")
