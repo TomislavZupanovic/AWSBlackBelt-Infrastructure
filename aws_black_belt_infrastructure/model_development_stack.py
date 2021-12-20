@@ -15,7 +15,6 @@ from aws_cdk import (
     Tags, Stack, CfnOutput
 )
 from constructs import Construct
-import constructs
 
 class ModelDevelopment(Stack):
     def __init__(self, scope: Construct, construct_id: str, parameters: dict, **kwargs) -> None:
@@ -578,3 +577,19 @@ class ModelDevelopment(Stack):
         CfnOutput(self, "KMSKeyARN", description="ARN of the KMS Key",
                   value=kms_key.key_arn,
                   export_name="KMSKeyARN")
+        
+        CfnOutput(self, "FargateClusterARN", description="ARN of the Fargate Cluster",
+                  value=fargate_cluster.cluster_arn,
+                  export_name="FargateClusterARN")
+        
+        CfnOutput(self, "FargateSecurityGroupExport", description="ID of the Fargate Security Group",
+                  value=fargate_security_group.security_group_id,
+                  export_name="FargateSecurityGroupId")
+        
+        CfnOutput(self, "FargateRoleARNExport", description="ARN of the Fargate Role",
+                  value=fargate_role.role_arn,
+                  export_name="FargateRoleARN")
+        
+        CfnOutput(self, "HostedZoneIdExport", description="ID of the Route53 Hosted Zone",
+                  value=hosted_zone.hosted_zone_id,
+                  export_name="HostedZoneId")

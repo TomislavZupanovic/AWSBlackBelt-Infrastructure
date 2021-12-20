@@ -1,11 +1,13 @@
 from aws_cdk import (
+    aws_ecs,
     aws_kms,
     aws_s3,
     aws_glue_alpha as aws_glue,
     aws_iam, aws_secretsmanager,
-    aws_ec2, aws_rds,
+    aws_ec2, aws_rds, aws_route53,
     aws_lambda, aws_s3_notifications,
     aws_stepfunctions_tasks, aws_stepfunctions,
+    aws_ecs_patterns,
     RemovalPolicy,
     Tags, Stack, Duration, CfnOutput, Fn
 )
@@ -339,6 +341,7 @@ class StorageLayer(Stack):
                                                      security_group_id=Fn.import_value("SecurityGroupId"))
         
         # Define LakeFS backend Aurora Database
+        lakefs_database_name = "LakeFS"
         lakefs_backend_db = aws_rds.ServerlessCluster(self, "LakeFSBackendDB",
                                                       engine=aws_rds.DatabaseClusterEngine.AURORA_POSTGRESQL,
                                                       credentials=aws_rds.Credentials.from_secret(lakefs_db_secret),
@@ -348,7 +351,7 @@ class StorageLayer(Stack):
                                                           subnet_type=aws_ec2.SubnetType.PRIVATE_WITH_NAT  # TODO: Double-check
                                                       ),
                                                       security_groups=[aurora_security_group],
-                                                      default_database_name='LakeFS',
+                                                      default_database_name=lakefs_database_name,
                                                       cluster_identifier="mlops-lakefs")
         # Define the LakeFS DB endpoint
         lakefs_db_endpoint = lakefs_backend_db.cluster_endpoint
@@ -356,3 +359,68 @@ class StorageLayer(Stack):
         #===========================================================================================================================
         #=======================================================FARGATE=============================================================
         #===========================================================================================================================
+        
+        # Import the Fargate Cluster from Model Development stack
+        fargate_cluster = aws_ecs.Cluster.from_cluster_attributes(self, "ImportedFargateCluster",
+                                                                  cluster_arn=Fn.import_value("FargateClusterARN"),
+                                                                  security_groups=[self.outbound_security_group],
+                                                                  vpc=self.vpc)
+        
+        # Import the Fargate Role from Model Development Stack
+        fargate_role = aws_iam.Role.from_role_arn(self, "ImportedFargateRole", 
+                                                  role_arn=Fn.import_value("FargateRoleARN"))
+        
+        # Import the Fargate Security Group from Model Development Stack
+        fargate_security_group =  aws_ec2.SecurityGroup.from_security_group_id(self, "ImportedFargateSecurityGroup",
+                                                     security_group_id=Fn.import_value("FargateSecurityGroupId"))
+        
+        #===========================================================================================================================
+        #=======================================================LAKEFS==============================================================
+        #===========================================================================================================================
+        
+        # Import the Route53 Hosted Zone from the Development Stack
+        hosted_zone = aws_route53.HostedZone.from_hosted_zone_id(self, "ImportedHostedZone",
+                                                                 hosted_zone_id=Fn.import_value("HostedZoneId"))
+        
+        # Define LakeFS Task Definition
+        lakefs_task_definition = aws_ecs.FargateTaskDefinition(self, "LakeFSTaskDefinition", cpu=1024, ephemeral_storage_gib=30,
+                                                               memory_limit_mib=4096, execution_role=fargate_role,
+                                                               family="mlops-lakefs-task", task_role=fargate_role)
+        
+        # Define the LakeFS Task Container 
+        lakefs_task_definition.add_container("LakeFSImageContainer",
+                                             image=aws_ecs.ContainerImage.from_asset(directory="lakefs"),
+                                             container_name="lakefs-task-container", privileged=False,
+                                             port_mappings=[aws_ecs.PortMapping(container_port=8000, protocol=aws_ecs.Protocol.TCP)],
+                                             logging=aws_ecs.LogDriver.aws_logs(stream_prefix="lakefs-task"),
+                                             secrets={
+                                                 "DB_USERNAME": aws_ecs.Secret.from_secrets_manager(lakefs_db_secret, "username"),
+                                                 "DB_PASSWORD": aws_ecs.Secret.from_secrets_manager(lakefs_db_secret, "password")
+                                             },
+                                             environment={
+                                                 "HOST": lakefs_db_endpoint.hostname,
+                                                 "PORT": "5432",
+                                                 "DATABASE": lakefs_database_name,
+                                             })
+        
+        # Define the Load Balanced Service for LakeFS
+        lakefs_load_balanced_service = aws_ecs_patterns.ApplicationLoadBalancedFargateService(
+            self, "LakeFSLoadBalancedService", assign_public_ip=False, cpu=1024, 
+            memory_limit_mib=4096, security_groups=[fargate_security_group],
+            task_definition=lakefs_task_definition, cluster=fargate_cluster,
+            task_subnets=aws_ec2.SubnetSelection(
+                one_per_az=True,
+                subnet_type=aws_ec2.SubnetType.PRIVATE_WITH_NAT  # TODO: Double-check
+            ),
+            desired_count=1, listener_port=80, domain_zone=hosted_zone,
+            domain_name="lakefs", load_balancer_name="mlops-lakefs-load-balancer",
+            open_listener=False, public_load_balancer=False, 
+            service_name="mlops-lekfs-service",
+            health_check_grace_period=Duration.minutes(3)
+        )
+        # Attach Fargate Security Group to the LakeFS Load Balancer
+        lakefs_load_balanced_service.load_balancer.add_security_group(fargate_security_group)
+        lakefs_load_balanced_service.target_group.configure_health_check(path="/_health", interval=Duration.seconds(60),
+                                                                         timeout=Duration.seconds(10))
+        
+        
