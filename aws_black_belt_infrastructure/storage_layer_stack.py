@@ -214,19 +214,22 @@ class StorageLayer(Stack):
         convert_job_step = aws_stepfunctions_tasks.GlueStartJobRun(self, "ConvertGlueJobStep", glue_job_name=convert_job.job_name,
                                                                    arguments=aws_stepfunctions.TaskInput.from_object(
                                                                        {
-                                                                           "file_key": aws_stepfunctions.JsonPath.string_at("$.file_key"),
-                                                                           "bucket": aws_stepfunctions.JsonPath.string_at("$.bucket"),
-                                                                           "--additional-python-modules": "awswrangler"
+                                                                            "database_name": glue_database.database_name,
+                                                                            "file_key": aws_stepfunctions.JsonPath.string_at("$.file_key"),
+                                                                            "bucket": aws_stepfunctions.JsonPath.string_at("$.bucket"),
+                                                                            "--additional-python-modules": "awswrangler"
                                                                        }
-                                                                   ))
+                                                                   ),
+                                                                   result_path=aws_stepfunctions.JsonPath.DISCARD)
         
         transform_job_step = aws_stepfunctions_tasks.GlueStartJobRun(self, "TransformGlueJobStep", glue_job_name=transform_job.job_name,
                                                                    arguments=aws_stepfunctions.TaskInput.from_object(
                                                                        {
+                                                                           "database_name": glue_database.database_name,
                                                                            "file_key": aws_stepfunctions.JsonPath.string_at("$.file_key"),
                                                                            "bucket": aws_stepfunctions.JsonPath.string_at("$.bucket"),
                                                                            "--additional-python-modules": "awswrangler"
-                                                                       } # TODO
+                                                                       }
                                                                    ))
         
         # Define StateMachine Definition of Steps
@@ -415,7 +418,7 @@ class StorageLayer(Stack):
             desired_count=1, listener_port=80, domain_zone=hosted_zone,
             domain_name="lakefs", load_balancer_name="mlops-lakefs-load-balancer",
             open_listener=False, public_load_balancer=False, 
-            service_name="mlops-lekfs-service",
+            service_name="mlops-lekefs-service",
             health_check_grace_period=Duration.minutes(3)
         )
         # Attach Fargate Security Group to the LakeFS Load Balancer

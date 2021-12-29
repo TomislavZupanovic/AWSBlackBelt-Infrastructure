@@ -385,14 +385,13 @@ class ModelDevelopment(Stack):
                                                         ]
                                                     ),
                                                     aws_iam.PolicyStatement(
-                                                        sid="S3BucketAccess",
+                                                        sid="FullS3BucketAccess",
                                                         effect=aws_iam.Effect.ALLOW,
                                                         actions=[
                                                             "s3:*"
                                                         ],
                                                         resources=[
-                                                            artifacts_bucket.bucket_arn,
-                                                            artifacts_bucket.bucket_arn + "/*"
+                                                            "*"
                                                         ]
                                                     ),
                                                ]
@@ -543,8 +542,8 @@ class ModelDevelopment(Stack):
                 ])
         
         # Define API Gateway with VPC Endpoint
-        development_api = aws_apigateway.RestApi(self, "DevelopmentAPI", rest_api_name="mlops-development-api",
-                                                 description="API used to start training and define training schedule",
+        api = aws_apigateway.RestApi(self, "MLOpsAPI", rest_api_name="mlops-api-gateway",
+                                                 description="API used to start training, inference and define training/inference schedule",
                                                  policy=api_policy, deploy=True,
                                                  deploy_options=aws_apigateway.StageOptions(stage_name="prod"),
                                                  endpoint_configuration=aws_apigateway.EndpointConfiguration(
@@ -556,10 +555,10 @@ class ModelDevelopment(Stack):
         training_integration = aws_apigateway.LambdaIntegration(training_lambda)
         
         # Define the API Resources and methods
-        train_resource = development_api.root.add_resource("start_training")
+        train_resource = api.root.add_resource("start_training")
         train_resource.add_method("PUT", training_integration)
         
-        schedule_resource = development_api.root.add_resource("training_schedule")
+        schedule_resource = api.root.add_resource("training_schedule")
         schedule_resource.add_method("PUT", training_integration)
         
         #===========================================================================================================================
@@ -593,3 +592,15 @@ class ModelDevelopment(Stack):
         CfnOutput(self, "HostedZoneIdExport", description="ID of the Route53 Hosted Zone",
                   value=hosted_zone.hosted_zone_id,
                   export_name="HostedZoneId")
+        
+        CfnOutput(self, "ECRRepositoryArn", description="Arn of the ECR Repository",
+                  value=ecr_repository.repository_arn,
+                  export_name="ECRRepositoryArn")
+        
+        CfnOutput(self, "SagemakerRoleArn", description="Arn of the Sagemaker Role",
+                  value=sagemaker_role.role_arn,
+                  export_name="SagemakerRoleArn")
+        
+        CfnOutput(self, "APIid", description="ID of the REST API",
+                  value=api.rest_api_id,
+                  export_name="APIid")
