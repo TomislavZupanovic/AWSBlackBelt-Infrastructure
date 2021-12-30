@@ -496,6 +496,8 @@ class ModelDevelopment(Stack):
                                                         "Subnet1": subnets_ids[1],
                                                         "Subnet2": subnets_ids[2],
                                                         "Subnet3": subnets_ids[3],
+                                                        "Region": self.region,
+                                                        "AccountId": self.account_id
                                                   },
                                               timeout=Duration.minutes(15), 
                                               function_name="mlops-training-lambda",

@@ -3,8 +3,11 @@ import boto3
 from datetime import datetime
 import os
 
-def get_latest_image():
-    """ Filter images and return the latest pushed one """
+def get_latest_image() -> str:
+    """ Filter images and return the latest pushed one in ECR Repository
+        :argument: None
+        :return: temp_tag - Tag of the latest Image in ECR Repository
+    """
     ecr = boto3.client('ecr', region_name='us-east-1')
     response = ecr.list_images(repositoryName=os.environ['ECRRepositoryName'],
                                   maxResults=1000)
@@ -22,6 +25,40 @@ def get_latest_image():
                 latest = pushed_at
                 temp_tag = tag
     return temp_tag
+
+def schedule_rule(cron: str, action: str = 'create') -> str:
+    """ Creates/Updates or Deletes the schedule Cron event Rule 
+        :argument: cron - Cron expression for time schedule
+        :argument: action - Defines creation or deletion of time schedule
+        :return: message - Message info for successful creation/deletion
+    """
+    events = boto3.client('events', region_name='us-east-1')
+    # Reformat the cron expression
+    cron_expression = f"cron({cron})"
+    # Define Rule name
+    rule_name = "TrainingSchedule"
+    # Define Lambda target Id
+    target_id = "TrainingScheduleTarget"
+    if action == 'create':
+        # Create/Update the Rule
+        response = events.put_rule(Name=rule_name, ScheduleExpression=cron_expression,
+                                   State='ENABLED', RoleArn=os.environ['EventRole'],
+                                   Description='Cron schedule for training',
+                                   Tags=[{'Key': 'Project', 'Value': 'BlackBelt'},
+                                         {'Key': 'Owner', 'Value': 'Tomislav Zupanovic'}])
+        # Define/Update the Rule target (this Lamdba)
+        target_response = events.put_targets(Rule=rule_name, Targets=[
+            {
+                "Id": target_id,
+                "Arn": f"arn:aws:lambda:{os.environ['Region']}:{os.environ['AccountId']}:function:{os.environ['SelfLambdaName']}" 
+            }
+        ])
+        return f'Successfully created/updated Rule: {rule_name}'
+    elif action == 'delete':
+        # Remove the target from Rule then delete the Rule
+        remove_target_response = events.remove_targets(Rule=rule_name, Ids=[target_id])
+        delete_response = events.delete_rule(Name=rule_name)
+        return f'Successfully delete Rule: {rule_name}'
 
 def start_training(image_tag: str, parameters: dict) -> dict:
     """ Starts the Sagemaker Processing Job as training compute service with specific image tag 
@@ -90,10 +127,17 @@ def lambda_handler(event, context):
     api_resource = event.get('resource', None)
     if api_resource == '/start_training':
         body = json.loads(event['body'])
-        image_tag = body['ImageTag']
+        image_tag = body.get('ImageTag', None)
+        if image_tag is None:
+            image_tag = get_latest_image()
         job_info = start_training(image_tag=image_tag, parameters=body)
         response = {'Message': 'Training successfully started!'}
         response['ImageTag'] = image_tag
         return construct_response(response, 200)
-    
+    elif api_resource == '/training_schedule':
+        body = json.loads(event['body'])
+        cron = body['Cron']
+        action = body['Action']
+    else:
+        
     return {'status_code': 200}
