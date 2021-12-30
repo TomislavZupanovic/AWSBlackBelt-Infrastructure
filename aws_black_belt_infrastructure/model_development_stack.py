@@ -407,6 +407,11 @@ class ModelDevelopment(Stack):
         #=========================================================LAMBDA============================================================
         #===========================================================================================================================
         
+        # Define the EventBridge Role
+        events_role = aws_iam.Role(self, "EventsRole", role_name="mlops-events-role",
+                                   assumed_by=aws_iam.ServicePrincipal('events.amazonaws.com'),
+                                   managed_policies=[aws_iam.ManagedPolicy.from_aws_managed_policy_name("AmazonEventBridgeFullAccess")])
+        
         # Define the Lambda Policy
         lambda_policy = aws_iam.ManagedPolicy(self, "LambdaPolicy", description="Used for Training Lambda permissions",
                                                managed_policy_name="mlops-training-lambda-policy",
@@ -483,16 +488,22 @@ class ModelDevelopment(Stack):
                                               code=aws_lambda.Code.from_asset("lambda_code/training_lambda"),
                                               environment={
                                                         "SagemakerRoleArn": sagemaker_role.role_arn,
+                                                        "EventRole": events_role.role_arn,
                                                         "ImageUri": ecr_repository.repository_uri,
+                                                        "ECRRepositoryName": ecr_repository.repository_name,
                                                         "SecurityGroupId": self.outbound_security_group.security_group_id,
                                                         "Subnet0": subnets_ids[0],
                                                         "Subnet1": subnets_ids[1],
                                                         "Subnet2": subnets_ids[2],
                                                         "Subnet3": subnets_ids[3],
                                                   },
-                                              timeout=Duration.minutes(5), 
+                                              timeout=Duration.minutes(15), 
                                               function_name="mlops-training-lambda",
                                               description="Used for starting the model training, invoked through API or Event Rule")
+        
+        # Add invocation permission for EventBridge
+        events_principal = aws_iam.ServicePrincipal("events.amazonaws.com")
+        training_lambda.grant_invoke(events_principal)
         
         #===========================================================================================================================
         #=========================================================APIGATEWAY========================================================
@@ -556,10 +567,10 @@ class ModelDevelopment(Stack):
         
         # Define the API Resources and methods
         train_resource = api.root.add_resource("start_training")
-        train_resource.add_method("PUT", training_integration)
+        train_resource.add_method("POST", training_integration)
         
         schedule_resource = api.root.add_resource("training_schedule")
-        schedule_resource.add_method("PUT", training_integration)
+        schedule_resource.add_method("POST", training_integration)
         
         #===========================================================================================================================
         #=========================================================STACK EXPORTS=====================================================
