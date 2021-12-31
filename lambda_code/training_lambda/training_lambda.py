@@ -1,4 +1,5 @@
 import json
+from typing import Optional
 import boto3
 from datetime import datetime
 import os
@@ -26,6 +27,31 @@ def get_latest_image() -> str:
                 temp_tag = tag
     return temp_tag
 
+def parameters_file(action: str = "PUT", parameters: dict = None) -> Optional[dict]:
+    """ Creates/updates or deletes the parameters JSON file saved for starting Training schedule 
+        :argument: parameters - Dictionary containing key-value pairs to save 
+        :argument: action - Defines creation, get or delete of parameters file
+        :return: parameters_json - Dictionary with saved parameters if action GET, otherwise None
+    """
+    s3 = boto3.resource('s3')
+    file_key = "config/training_schedule.json"
+    # Get S3 object from given bucket and file key
+    s3_object = s3.Object(os.environ['ArtifactsBucket'], file_key)
+    # Create/update parameters file
+    if action == "PUT":
+        for key in ['cron', 'action']:
+            del parameters[key]
+        s3_object.put(Body=(bytes(json.dumps(parameters).encode('UTF-8'))))
+    # Load parameters file
+    elif action == "GET":
+        file_content = s3_object.get()['Body'].read().decode('utf-8')
+        parameters_json = json.loads(file_content)
+        return parameters_json
+    # Delete parameters file
+    elif action == "DELETE":
+        s3_object.delete()
+            
+    
 def schedule_rule(cron: str, action: str = 'create') -> str:
     """ Creates/Updates or Deletes the schedule Cron event Rule 
         :argument: cron - Cron expression for time schedule
@@ -59,6 +85,7 @@ def schedule_rule(cron: str, action: str = 'create') -> str:
         remove_target_response = events.remove_targets(Rule=rule_name, Ids=[target_id])
         delete_response = events.delete_rule(Name=rule_name)
         return f'Successfully delete Rule: {rule_name}'
+
 
 def start_training(image_tag: str, parameters: dict) -> dict:
     """ Starts the Sagemaker Processing Job as training compute service with specific image tag 
@@ -135,9 +162,26 @@ def lambda_handler(event, context):
         response['ImageTag'] = image_tag
         return construct_response(response, 200)
     elif api_resource == '/training_schedule':
+        # Get parameters dictionary
         body = json.loads(event['body'])
         cron = body['Cron']
         action = body['Action']
+        # If action is delete
+        if action == 'delete':
+            param_action = "DELETE"
+        # If action is create
+        else:
+            param_action = "PUT"
+        parameters_file(action=param_action, parameters=body)
+        message = schedule_rule(cron, action)
+        response = {'Message': message}
+        return construct_response(response, 200)
     else:
-        
-    return {'status_code': 200}
+        # If triggered by a Cron schedule
+        resource = event['resources'][0]
+        rule_name = resource.split('/')[1]
+        # Get the parameters file as dictionary to start training on schedule
+        parameters = parameters_file(action="GET")
+        image_tag = get_latest_image()
+        job_info = start_training(image_tag=image_tag, parameters=parameters)
+        return {'status_code': 200, 'body': 'Successfully started training on schedule with latest image'}

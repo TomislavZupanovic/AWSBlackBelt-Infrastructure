@@ -265,4 +265,4 @@ class InferenceStack(Stack):
         inference_resource.add_method("PUT", inference_integration)
         
         schedule_resource = api.root.add_resource("inference_schedule")
-        schedule_resource.add_method("PUT", inference_integration)
+        schedule_resource.add_method("POST", inference_integration)

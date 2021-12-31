@@ -471,6 +471,18 @@ class ModelDevelopment(Stack):
                                                             "*"
                                                         ]
                                                     ),
+                                                    aws_iam.PolicyStatement(
+                                                        sid="S3Access",
+                                                        effect=aws_iam.Effect.ALLOW,
+                                                        actions=[
+                                                            "s3:*"
+                                                        ],
+                                                        resources=[
+                                                            artifacts_bucket.bucket_arn,
+                                                            artifacts_bucket.bucket_arn + '/*'
+                                                        ]
+                                                    ),
+                                                    
                                                ]
                                             )
         
@@ -497,7 +509,8 @@ class ModelDevelopment(Stack):
                                                         "Subnet2": subnets_ids[2],
                                                         "Subnet3": subnets_ids[3],
                                                         "Region": self.region,
-                                                        "AccountId": self.account_id
+                                                        "AccountId": self.account_id,
+                                                        "ArtifactsBucket": artifacts_bucket.bucket_name
                                                   },
                                               timeout=Duration.minutes(15), 
                                               function_name="mlops-training-lambda",
