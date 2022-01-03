@@ -1,0 +1,12 @@
+FROM treeverse/lakefs:latest
+
+# Configure Environment variables
+ENV LAKEFS_DATABASE_CONNECTION_STRING=postgresql://${DB_USERNAME}:${DB_PASSWORD}@${HOST}:${PORT}/${DATABASE}
+ENV LAKEFS_AUTH_ENCRYPT_SECRET_KEY="[ENCRYPTION_SECRET_KEY]" 
+ENV LAKEFS_BLOCKSTORE_TYPE=s3
+
+# Set the PORT
+EXPOSE 8000
+
+# Set the ENTRYPOINT
+ENTRYPOINT [ "/app/lakefs", "run" ] 

@@ -114,6 +114,16 @@ class InferenceStack(Stack):
                                                             "*"
                                                         ]
                                                     ),
+                                                    aws_iam.PolicyStatement(
+                                                        sid="EventsAccess",
+                                                        effect=aws_iam.Effect.ALLOW,
+                                                        actions=[
+                                                            "events:*"
+                                                        ],
+                                                        resources=[
+                                                            "*"
+                                                        ]
+                                                    ),
                                                ]
                                             )
         
@@ -123,6 +133,7 @@ class InferenceStack(Stack):
                                     managed_policies=[lambda_policy])
         
         # Define Lambda function
+        inference_lambda_name = "mlops-inference-lambda"
         inference_lambda = aws_lambda.Function(self, "InferenceLambda", role=lambda_role,
                                               runtime=aws_lambda.Runtime.PYTHON_3_8,
                                               handler="inference_lambda.lambda_handler",
@@ -137,11 +148,19 @@ class InferenceStack(Stack):
                                                         "Subnet1": subnets_ids[1],
                                                         "Subnet2": subnets_ids[2],
                                                         "Subnet3": subnets_ids[3],
+                                                        "Region": self.region,
+                                                        "AccountId": self.account_id,
+                                                        "ArtifactsBucket": Fn.import_value("ArtifactsBucketName"),
+                                                        "SelfLambdaName": inference_lambda_name,
+                                                        "EventRole": Fn.import_value("EventRoleArn"),
                                                   },
                                               timeout=Duration.minutes(5), 
-                                              function_name="mlops-inference-lambda",
+                                              function_name=inference_lambda_name,
                                               description="Used for starting the Sagemaker Processing Job for Batch Inference")
         
+        # Add invocation permission for EventBridge
+        events_principal = aws_iam.ServicePrincipal("events.amazonaws.com")
+        inference_lambda.grant_invoke(events_principal)
         #===========================================================================================================================
         #=======================================================KMS & SECRET==============================================================
         #===========================================================================================================================
@@ -262,7 +281,7 @@ class InferenceStack(Stack):
         
         # Define the API Resources and methods
         inference_resource = api.root.add_resource("start_batch_inference")
-        inference_resource.add_method("PUT", inference_integration)
+        inference_resource.add_method("POST", inference_integration)
         
         schedule_resource = api.root.add_resource("inference_schedule")
         schedule_resource.add_method("POST", inference_integration)

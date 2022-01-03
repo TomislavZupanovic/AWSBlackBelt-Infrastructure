@@ -295,18 +295,18 @@ class StorageLayer(Stack):
                                     managed_policies=[lambda_policy])
         
         # Define Lambda function
-        etl_lambda = aws_lambda.Function(self, "ETLLambda", role=lambda_role,
-                                              runtime=aws_lambda.Runtime.PYTHON_3_8,
-                                              handler="etl_lambda.lambda_handler",
+        etl_lambda = aws_lambda.DockerImageFunction(self, "ETLLambda", role=lambda_role,
                                               vpc=self.vpc, vpc_subnets=aws_ec2.SubnetType.PRIVATE_WITH_NAT,
                                               security_groups=[self.outbound_security_group],
-                                              code=aws_lambda.Code.from_asset("lambda_code/etl_lambda"),
+                                              code=aws_lambda.DockerImageCode.from_image_asset("lambda_code/etl_lambda"),
                                               environment={
                                                         "SecurityGroupId": self.outbound_security_group.security_group_id,
+                                                        "StateMachineArn": state_machine.state_machine_arn
                                                   },
                                               timeout=Duration.minutes(5), 
                                               function_name="mlops-etl-lambda",
-                                              description="Used for starting the Step Functions for ETL process")
+                                              description="Used for starting the Step Functions for ETL process",
+                                              memory_size=256)
         
         # Define the S3 Notifications to trigger Lambda
         storage_bucket.add_event_notification(aws_s3.EventType.OBJECT_CREATED, 

@@ -99,7 +99,7 @@ def start_training(image_tag: str, parameters: dict) -> dict:
     environment = {}
     for name, value in parameters.items():
         environment[name] = value
-        
+    # Define the Sagemaker Processing Job parameters
     response = sagemaker.create_processing_job(ProcessingJobName=name,
                                                ProcessingResources={
                                                    'ClusterConfig': {

@@ -482,7 +482,16 @@ class ModelDevelopment(Stack):
                                                             artifacts_bucket.bucket_arn + '/*'
                                                         ]
                                                     ),
-                                                    
+                                                    aws_iam.PolicyStatement(
+                                                        sid="EventsAccess",
+                                                        effect=aws_iam.Effect.ALLOW,
+                                                        actions=[
+                                                            "events:*"
+                                                        ],
+                                                        resources=[
+                                                            "*"
+                                                        ]
+                                                    ),
                                                ]
                                             )
         
@@ -492,6 +501,7 @@ class ModelDevelopment(Stack):
                                     managed_policies=[lambda_policy])
         
         # Define Lambda function
+        training_lambda_name = "mlops-training-lambda"
         training_lambda = aws_lambda.Function(self, "TrainingLambda", role=lambda_role,
                                               runtime=aws_lambda.Runtime.PYTHON_3_8,
                                               handler="training_lambda.lambda_handler",
@@ -510,10 +520,11 @@ class ModelDevelopment(Stack):
                                                         "Subnet3": subnets_ids[3],
                                                         "Region": self.region,
                                                         "AccountId": self.account_id,
-                                                        "ArtifactsBucket": artifacts_bucket.bucket_name
+                                                        "ArtifactsBucket": artifacts_bucket.bucket_name,
+                                                        "SelfLambdaName": training_lambda_name
                                                   },
                                               timeout=Duration.minutes(15), 
-                                              function_name="mlops-training-lambda",
+                                              function_name=training_lambda_name,
                                               description="Used for starting the model training, invoked through API or Event Rule")
         
         # Add invocation permission for EventBridge
@@ -630,3 +641,12 @@ class ModelDevelopment(Stack):
         CfnOutput(self, "APIid", description="ID of the REST API",
                   value=api.rest_api_id,
                   export_name="APIid")
+        
+        CfnOutput(self, "ArtifactsBucket", description="Name of the Artifacts Bucket",
+                  value=artifacts_bucket.bucket_name,
+                  export_name="ArtifactsBucketName")
+        
+        CfnOutput(self, "EventRoleArn", description="ARN of the Event Role",
+                  value=events_role.role_arn,
+                  export_name="EventRoleArn")
+        
