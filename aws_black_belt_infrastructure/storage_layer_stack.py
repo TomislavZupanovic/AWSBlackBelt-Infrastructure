@@ -142,7 +142,7 @@ class StorageLayer(Stack):
                                        python_version=aws_glue.PythonVersion.THREE,
                                        script=aws_glue.Code.from_asset(path="glue_code/transform_job.py")
                                    ),
-                                   default_arguments={"--additional-python-modules": "awswrangler"},
+                                   default_arguments={"--additional-python-modules": "awswrangler,lakefs_client"},
                                    description="Job used to transform raw data into curated data",
                                    continuous_logging=aws_glue.ContinuousLoggingProps(enabled=True,
                                                                                       log_group="/aws-glue/mlops-jobs/transform-job/"),
@@ -228,7 +228,7 @@ class StorageLayer(Stack):
                                                                            "database_name": glue_database.database_name,
                                                                            "file_key": aws_stepfunctions.JsonPath.string_at("$.file_key"),
                                                                            "bucket": aws_stepfunctions.JsonPath.string_at("$.bucket"),
-                                                                           "--additional-python-modules": "awswrangler"
+                                                                           "--additional-python-modules": "awswrangler,lakefs_client"
                                                                        }
                                                                    ))
         
@@ -315,7 +315,7 @@ class StorageLayer(Stack):
         
         storage_bucket.add_event_notification(aws_s3.EventType.OBJECT_CREATED, 
                                               aws_s3_notifications.LambdaDestination(etl_lambda),
-                                              aws_s3.NotificationKeyFilter(prefix="curated/parquet/"))
+                                              aws_s3.NotificationKeyFilter(prefix="raw/total/csv/"))
         
         #===========================================================================================================================
         #=======================================================KMS & SECRET==============================================================

@@ -12,3 +12,4 @@ cdk.out
 
 # Custom scripts
 aws_sso.py
+testing.py
