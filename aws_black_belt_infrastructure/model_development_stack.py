@@ -522,7 +522,9 @@ class ModelDevelopment(Stack):
                                                         "Region": self.acc_region,
                                                         "AccountId": self.account_id,
                                                         "ArtifactsBucket": artifacts_bucket.bucket_name,
-                                                        "SelfLambdaName": training_lambda_name
+                                                        "SelfLambdaName": training_lambda_name,
+                                                        "Owner": self.owner,
+                                                        "Project": self.project
                                                   },
                                               timeout=Duration.minutes(5), 
                                               function_name=training_lambda_name,
@@ -583,7 +585,7 @@ class ModelDevelopment(Stack):
         api = aws_apigateway.RestApi(self, "MLOpsAPI", rest_api_name="mlops-api-gateway",
                                                  description="API used to start training, inference and define training/inference schedule",
                                                  policy=api_policy, deploy=True,
-                                                 deploy_options=aws_apigateway.StageOptions(stage_name="prod"),
+                                                 deploy_options=aws_apigateway.StageOptions(stage_name="v1"),
                                                  endpoint_configuration=aws_apigateway.EndpointConfiguration(
                                                      types=[aws_apigateway.EndpointType.PRIVATE],
                                                      vpc_endpoints=[vpc_endpoint]

@@ -153,6 +153,8 @@ class InferenceStack(Stack):
                                                         "ArtifactsBucket": Fn.import_value("ArtifactsBucketName"),
                                                         "SelfLambdaName": inference_lambda_name,
                                                         "EventRole": Fn.import_value("EventRoleArn"),
+                                                        "Owner": self.owner,
+                                                        "Project": self.project
                                                   },
                                               timeout=Duration.minutes(5), 
                                               function_name=inference_lambda_name,

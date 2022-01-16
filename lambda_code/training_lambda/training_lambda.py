@@ -70,8 +70,8 @@ def schedule_rule(cron: str, action: str = 'create') -> str:
         response = events.put_rule(Name=rule_name, ScheduleExpression=cron_expression,
                                    State='ENABLED', RoleArn=os.environ['EventRole'],
                                    Description='Cron schedule for training',
-                                   Tags=[{'Key': 'Project', 'Value': 'BlackBelt'},
-                                         {'Key': 'Owner', 'Value': 'Tomislav Zupanovic'}])
+                                   Tags=[{'Key': 'Project', 'Value': os.environ['Project']},
+                                         {'Key': 'Owner', 'Value': os.environ['Owner']}])
         # Define/Update the Rule target (this Lamdba)
         target_response = events.put_targets(Rule=rule_name, Targets=[
             {
@@ -124,11 +124,11 @@ def start_training(image_tag: str, parameters: dict) -> dict:
                                                Tags=[
                                                    {
                                                        'Key': 'Project',
-                                                       'Value': 'BlackBelt'
+                                                       'Value': os.environ["Project"]
                                                    },
                                                    {
                                                        'Key': 'Owner',
-                                                       'Value': 'Tomislav Zupanovic'
+                                                       'Value': os.environ["Owner"]
                                                    }
                                                ],
                                                Environment=environment)
