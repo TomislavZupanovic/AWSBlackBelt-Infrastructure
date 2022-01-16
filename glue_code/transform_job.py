@@ -80,7 +80,8 @@ if __name__ == '__main__':
                             'bucket'])
 
     # Define the path to the raw parquet file
-    file_key = args['file_key'].replace('/csv', '/parquet')
+    # file_key = args['file_key'].replace('/csv', '/parquet')
+    file_key = args['file_key']
     ingest_type = args['ingest_type']
     filename = args['file_name']
 
