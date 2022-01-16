@@ -1,5 +1,4 @@
 import json
-from typing import Optional
 import boto3
 from datetime import datetime
 import os

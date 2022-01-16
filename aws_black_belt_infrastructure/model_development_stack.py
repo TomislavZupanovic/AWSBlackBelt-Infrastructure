@@ -523,7 +523,7 @@ class ModelDevelopment(Stack):
                                                         "ArtifactsBucket": artifacts_bucket.bucket_name,
                                                         "SelfLambdaName": training_lambda_name
                                                   },
-                                              timeout=Duration.minutes(15), 
+                                              timeout=Duration.minutes(5), 
                                               function_name=training_lambda_name,
                                               description="Used for starting the model training, invoked through API or Event Rule")
         
