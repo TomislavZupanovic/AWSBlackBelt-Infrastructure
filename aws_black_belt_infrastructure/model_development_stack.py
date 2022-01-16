@@ -28,9 +28,10 @@ class ModelDevelopment(Stack):
         self.vpc_endpoint_id = parameters["VPCEndpointId"]
         self.vpc_security_group_id = parameters["VPCSecurityGroupId"]
         self.owner = parameters["Owner"]
+        self.project = parameters["Project"]
         
         # Define Tags for all resources (where they apply)
-        Tags.of(self).add("Project", "BlackBelt")
+        Tags.of(self).add("Project", self.project)
         Tags.of(self).add("Owner", self.owner)
         
         #===========================================================================================================================

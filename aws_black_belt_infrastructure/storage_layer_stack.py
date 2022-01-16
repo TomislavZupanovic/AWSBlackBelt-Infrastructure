@@ -22,9 +22,10 @@ class StorageLayer(Stack):
         self.account_id = parameters["AccountId"]
         self.region = parameters["Region"]
         self.owner = parameters["Owner"]
+        self.project = parameters["Project"]
         
         # Define Tags for all resources (where they apply)
-        Tags.of(self).add("Project", "BlackBelt")
+        Tags.of(self).add("Project", self.project)
         Tags.of(self).add("Owner", self.owner)
         
         #===========================================================================================================================
@@ -131,8 +132,8 @@ class StorageLayer(Stack):
                                    worker_count=1,
                                    role=glue_job_role,
                                    tags={
-                                       "Project":"BlackBelt",
-                                       "Owner": "Tomislav Zupanovic" 
+                                       "Project": self.project,
+                                       "Owner": self.owner
                                    })
         
         # Define the Glue Job for transforming data
@@ -151,8 +152,8 @@ class StorageLayer(Stack):
                                    worker_count=1,
                                    role=glue_job_role,
                                    tags={
-                                       "Project":"BlackBelt",
-                                       "Owner": "Tomislav Zupanovic" 
+                                       "Project": self.project,
+                                       "Owner": self.owner 
                                    })
         
         #===========================================================================================================================

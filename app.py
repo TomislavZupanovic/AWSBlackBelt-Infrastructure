@@ -10,6 +10,7 @@ app = cdk.App()
 
 # Define the Account parameters for Stacks
 parameters = {"Owner": "Tomislav Zupanovic",
+              "Project": "BlackBelt",
               "AccountId": "167321155121",
               "Region": "us-east-1",
               "VPCEndpointId": "vpce-0a7e4031f9928bdbc",

@@ -87,16 +87,23 @@ if __name__ == '__main__':
     # Get the raw parquet data
     raw_data = awswrangler.s3.read_parquet(path=[f"s3://{args['bucket']}/{file_key}"])
 
+    # Define the data schema for Athena table
+    data_schema = {"unit": "int", "cycle": "int", "altitude": "double", "mach": "double", "tra": "double"}
+    for i in range(1, 22):
+        data_schema[f'sensor_{i}'] = "double"
+    
     if ingest_type == 'partitioned':
         curated_data = add_timestamp(raw_data)
+        data_schema['timestamp'] = "timestamp"
     else:
         curated_data = create_target(raw_data)
+        data_schema['rul'] = 'int'
 
     # Save transformed data to parquet format
     path = f"s3://{args['bucket']}/curated/parquet"
     table = f"mlops-curated-data-{ingest_type}"
     awswrangler.s3.to_parquet(curated_data, path=path, dataset=True, mode='append', 
-                            database=args['database_name'], table=table, partition_cols=['unit'])
+                            database=args['database_name'], table=table, partition_cols=['unit'], dtype=data_schema)
 
     # Save Dataframes locally
     raw_data.to_csv('raw_data.csv')
