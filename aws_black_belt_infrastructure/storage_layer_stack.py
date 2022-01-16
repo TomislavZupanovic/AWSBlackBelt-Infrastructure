@@ -2,6 +2,7 @@ from aws_cdk import (
     aws_ecs,
     aws_kms,
     aws_s3,
+    aws_logs,
     aws_glue_alpha as aws_glue,
     aws_iam, aws_secretsmanager,
     aws_ec2, aws_rds, aws_route53,
@@ -20,7 +21,7 @@ class StorageLayer(Stack):
 
         # Get Account environment parameters
         self.account_id = parameters["AccountId"]
-        self.region = parameters["Region"]
+        self.acc_region = parameters["Region"]
         self.owner = parameters["Owner"]
         self.project = parameters["Project"]
         
@@ -72,7 +73,7 @@ class StorageLayer(Stack):
                                                             "logs:CreateLogStream"
                                                         ],
                                                         resources=[
-                                                            f"arn:aws:logs:{self.region}:{self.account_id}:log-group:/aws-glue/mlops-jobs/*"
+                                                            f"arn:aws:logs:{self.acc_region}:{self.account_id}:log-group:/aws-glue/mlops-jobs/*"
                                                         ]
                                                     ),
                                                     aws_iam.PolicyStatement(
@@ -118,7 +119,7 @@ class StorageLayer(Stack):
         
         # Define the Glue Job for converting .csv to .parquet
         convert_job = aws_glue.Job(self, "ConvertGlueJob", 
-                                   executable=aws_glue.JobExecutable.python_shell(
+                                   executable=aws_glue.JobExecutable.python_etl(
                                        glue_version=aws_glue.GlueVersion.V3_0,
                                        python_version=aws_glue.PythonVersion.THREE,
                                        script=aws_glue.Code.from_asset(path="glue_code/convert_job.py")
@@ -126,7 +127,9 @@ class StorageLayer(Stack):
                                    default_arguments={"--additional-python-modules": "awswrangler"},
                                    description="Job used to convert data format from CSV to the Parquet",
                                    continuous_logging=aws_glue.ContinuousLoggingProps(enabled=True,
-                                                                                      log_group="/aws-glue/mlops-jobs/convert-job/"),
+                                                                                      log_group=aws_logs.LogGroup(self, 
+                                                                                        'ConvertJobLogGroup', 
+                                                                                        log_group_name="/aws-glue/mlops-jobs/convert-job/")),
                                    job_name="mlops-convert-job",
                                    worker_type=aws_glue.WorkerType.STANDARD,
                                    worker_count=1,
@@ -138,7 +141,7 @@ class StorageLayer(Stack):
         
         # Define the Glue Job for transforming data
         transform_job = aws_glue.Job(self, "TransformGlueJob", 
-                                   executable=aws_glue.JobExecutable.python_shell(
+                                   executable=aws_glue.JobExecutable.python_etl(
                                        glue_version=aws_glue.GlueVersion.V3_0,
                                        python_version=aws_glue.PythonVersion.THREE,
                                        script=aws_glue.Code.from_asset(path="glue_code/transform_job.py")
@@ -146,7 +149,9 @@ class StorageLayer(Stack):
                                    default_arguments={"--additional-python-modules": "awswrangler,lakefs_client"},
                                    description="Job used to transform raw data into curated data",
                                    continuous_logging=aws_glue.ContinuousLoggingProps(enabled=True,
-                                                                                      log_group="/aws-glue/mlops-jobs/transform-job/"),
+                                                                                      log_group=aws_logs.LogGroup(self, 
+                                                                                        'TransformJobLogGroup', 
+                                                                                        log_group_name="/aws-glue/mlops-jobs/transform-job/")),
                                    job_name="mlops-transform-job",
                                    worker_type=aws_glue.WorkerType.STANDARD,
                                    worker_count=1,
@@ -258,7 +263,7 @@ class StorageLayer(Stack):
                                                             "logs:CreateLogStream"
                                                         ],
                                                         resources=[
-                                                            f"arn:aws:logs:{self.region}:{self.account_id}:log-group:/aws/lambda/*"
+                                                            f"arn:aws:logs:{self.acc_region}:{self.account_id}:log-group:/aws/lambda/*"
                                                         ]
                                                     ),
                                                     aws_iam.PolicyStatement(
@@ -343,13 +348,14 @@ class StorageLayer(Stack):
         #===========================================================================================================================
         
         # Import Aurora Security Group from Model Developmnet Stack
-        aurora_security_group = aws_ec2.SecurityGroup.from_security_group_id(self, "ImportedSecurityGroup",
+        aurora_security_group = aws_ec2.SecurityGroup.from_security_group_id(self, "ImportedAuroraSecurityGroup",
                                                      security_group_id=Fn.import_value("SecurityGroupId"))
         
         # Define LakeFS backend Aurora Database
         lakefs_database_name = "LakeFS"
         lakefs_backend_db = aws_rds.ServerlessCluster(self, "LakeFSBackendDB",
-                                                      engine=aws_rds.DatabaseClusterEngine.AURORA_POSTGRESQL,
+                                                      engine=aws_rds.DatabaseClusterEngine.aurora_postgres(version=
+                                                                                                           aws_rds.AuroraPostgresEngineVersion.VER_12_4),
                                                       credentials=aws_rds.Credentials.from_secret(lakefs_db_secret),
                                                       vpc=self.vpc,
                                                       vpc_subnets=aws_ec2.SubnetSelection(
@@ -369,6 +375,7 @@ class StorageLayer(Stack):
         # Import the Fargate Cluster from Model Development stack
         fargate_cluster = aws_ecs.Cluster.from_cluster_attributes(self, "ImportedFargateCluster",
                                                                   cluster_arn=Fn.import_value("FargateClusterARN"),
+                                                                  cluster_name=Fn.import_value("FargateClusterName"),
                                                                   security_groups=[self.outbound_security_group],
                                                                   vpc=self.vpc)
         
@@ -385,8 +392,9 @@ class StorageLayer(Stack):
         #===========================================================================================================================
         
         # Import the Route53 Hosted Zone from the Development Stack
-        hosted_zone = aws_route53.HostedZone.from_hosted_zone_id(self, "ImportedHostedZone",
-                                                                 hosted_zone_id=Fn.import_value("HostedZoneId"))
+        hosted_zone = aws_route53.HostedZone.from_hosted_zone_attributes(self, "ImportedHostedZone",
+                                                                 hosted_zone_id=Fn.import_value("HostedZoneId"),
+                                                                 zone_name=Fn.import_value("HostedZoneName"))
         
         # Define LakeFS Task Definition
         lakefs_task_definition = aws_ecs.FargateTaskDefinition(self, "LakeFSTaskDefinition", cpu=1024, ephemeral_storage_gib=30,

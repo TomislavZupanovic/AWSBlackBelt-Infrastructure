@@ -23,7 +23,7 @@ class InferenceStack(Stack):
         
         # Get Account environment parameters
         self.account_id = parameters["AccountId"]
-        self.region = parameters["Region"]
+        self.acc_region = parameters["Region"]
         self.owner = parameters["Owner"]
         self.project = parameters["Project"]
         
@@ -49,8 +49,9 @@ class InferenceStack(Stack):
         #===========================================================================================================================
         
         # Import the ECR repository from the Model Development Stack
-        ecr_repository = aws_ecr.Repository.from_repository_arn(self, "ImportedECRRepository",
-                                                                repository_arn=Fn.import_value("ECRRepositoryArn"))
+        ecr_repository = aws_ecr.Repository.from_repository_attributes(self, "ImportedECRRepository",
+                                                                repository_arn=Fn.import_value("ECRRepositoryArn"),
+                                                                repository_name=Fn.import_value("ECRRepositoryName"))
         
         #===========================================================================================================================
         #=======================================================LAMBDA==============================================================
@@ -69,7 +70,7 @@ class InferenceStack(Stack):
                                                             "logs:CreateLogStream"
                                                         ],
                                                         resources=[
-                                                            f"arn:aws:logs:{self.region}:{self.account_id}:log-group:/aws/lambda/*"
+                                                            f"arn:aws:logs:{self.acc_region}:{self.account_id}:log-group:/aws/lambda/*"
                                                         ]
                                                     ),
                                                     aws_iam.PolicyStatement(
@@ -147,9 +148,7 @@ class InferenceStack(Stack):
                                                         "SecurityGroupId": self.outbound_security_group.security_group_id,
                                                         "Subnet0": subnets_ids[0],
                                                         "Subnet1": subnets_ids[1],
-                                                        "Subnet2": subnets_ids[2],
-                                                        "Subnet3": subnets_ids[3],
-                                                        "Region": self.region,
+                                                        "Region": self.acc_region,
                                                         "AccountId": self.account_id,
                                                         "ArtifactsBucket": Fn.import_value("ArtifactsBucketName"),
                                                         "SelfLambdaName": inference_lambda_name,
@@ -184,7 +183,7 @@ class InferenceStack(Stack):
         #===========================================================================================================================
         
         # Import Aurora Security Group from Model Developmnet Stack
-        aurora_security_group = aws_ec2.SecurityGroup.from_security_group_id(self, "ImportedSecurityGroup",
+        aurora_security_group = aws_ec2.SecurityGroup.from_security_group_id(self, "ImportedAuroraSecurityGroup",
                                                      security_group_id=Fn.import_value("SecurityGroupId"))
         
         # Define Grafana backend Aurora Database
@@ -210,6 +209,7 @@ class InferenceStack(Stack):
         # Import the Fargate Cluster from Model Development stack
         fargate_cluster = aws_ecs.Cluster.from_cluster_attributes(self, "ImportedFargateCluster",
                                                                   cluster_arn=Fn.import_value("FargateClusterARN"),
+                                                                  cluster_name=Fn.import_value("FargateClusterName"),
                                                                   security_groups=[self.outbound_security_group],
                                                                   vpc=self.vpc)
         
@@ -226,8 +226,9 @@ class InferenceStack(Stack):
         #===========================================================================================================================
         
         # Import the Route53 Hosted Zone from the Development Stack
-        hosted_zone = aws_route53.HostedZone.from_hosted_zone_id(self, "ImportedHostedZone",
-                                                                 hosted_zone_id=Fn.import_value("HostedZoneId"))
+        hosted_zone = aws_route53.HostedZone.from_hosted_zone_attributes(self, "ImportedHostedZone",
+                                                                 hosted_zone_id=Fn.import_value("HostedZoneId"),
+                                                                 zone_name=Fn.import_value("HostedZoneName"))
         
         # Define Grafana Task Definition
         grafana_task_definition = aws_ecs.FargateTaskDefinition(self, "GrafanaTaskDefinition", cpu=1024, ephemeral_storage_gib=30,
@@ -275,7 +276,8 @@ class InferenceStack(Stack):
         #===========================================================================================================================
         
         # Import the existing API Gateway (REST) from Development Stack
-        api = aws_apigateway.RestApi.from_rest_api_id(self, "ImportedMLOpsAPI", rest_api_id=Fn.import_value("APIid"))
+        api = aws_apigateway.RestApi.from_rest_api_attributes(self, "ImportedMLOpsAPI", rest_api_id=Fn.import_value("APIid"),
+                                                              root_resource_id=Fn.import_value("APIRoot"))
         
          # Define Integration Lambda with API Gateway
         inference_integration = aws_apigateway.LambdaIntegration(inference_lambda)

@@ -117,8 +117,7 @@ def start_training(image_tag: str, parameters: dict) -> dict:
                                                NetworkConfig={
                                                    'VpcConfig': {
                                                        'SecurityGroupIds': [os.environ['SecurityGroupId']],
-                                                       'Subnets': [os.environ['Subnet0'], os.environ['Subnet1'],
-                                                                   os.environ['Subnet2'], os.environ['Subnet3']]
+                                                       'Subnets': [os.environ['Subnet0'], os.environ['Subnet1']]
                                                    }
                                                },
                                                RoleArn=os.environ['SagemakerRoleArn'],

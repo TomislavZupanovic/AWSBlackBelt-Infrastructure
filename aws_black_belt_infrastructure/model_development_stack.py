@@ -22,7 +22,7 @@ class ModelDevelopment(Stack):
 
         # Get Account environment parameters
         self.account_id = parameters["AccountId"]
-        self.region = parameters["Region"]
+        self.acc_region = parameters["Region"]
         self.vpc = None
         self.outbound_security_group = None
         self.vpc_endpoint_id = parameters["VPCEndpointId"]
@@ -113,7 +113,8 @@ class ModelDevelopment(Stack):
         # Define Serverless Aurora for MLflow backend
         mlflow_database_name = "MLflowBackend"
         mlflow_backend_db = aws_rds.ServerlessCluster(self, "MLflowBackendDB",
-                                                      engine=aws_rds.DatabaseClusterEngine.AURORA_POSTGRESQL,
+                                                      engine=aws_rds.DatabaseClusterEngine.aurora_postgres(version=
+                                                                                                           aws_rds.AuroraPostgresEngineVersion.VER_12_4),
                                                       credentials=aws_rds.Credentials.from_secret(mlflow_db_secret),
                                                       vpc=self.vpc,
                                                       vpc_subnets=aws_ec2.SubnetSelection(
@@ -247,8 +248,9 @@ class ModelDevelopment(Stack):
         #===========================================================================================================================
         
         # Define Route53 Hosted Zone
+        hosted_zone_name = "aast-innovation.iolap.com"
         hosted_zone = aws_route53.HostedZone(self, "Route53HostedZone",
-                                             vpcs=[self.vpc], zone_name="aast-innovation.iolap.com")
+                                             vpcs=[self.vpc], zone_name=hosted_zone_name)
         
         # Define Mlflow Task Definition
         mlflow_task_definition = aws_ecs.FargateTaskDefinition(self, "MLflowTaskDefinition", cpu=1024, ephemeral_storage_gib=30,
@@ -312,7 +314,7 @@ class ModelDevelopment(Stack):
                                                             "logs:CreateLogStream"
                                                         ],
                                                         resources=[
-                                                            f"arn:aws:logs:{self.region}:{self.account_id}:log-group:/aws/codebuild/*"
+                                                            f"arn:aws:logs:{self.acc_region}:{self.account_id}:log-group:/aws/codebuild/*"
                                                         ]
                                                     ),
                                                     aws_iam.PolicyStatement(
@@ -343,7 +345,7 @@ class ModelDevelopment(Stack):
                                                    subnet_type=aws_ec2.SubnetType.PRIVATE_WITH_NAT)
         
         # Define the CodeBuild Project for GitHub Repository
-        codebuild_project = aws_codebuild.Project(self, "CodeBuildProject", allow_all_outbound=True,
+        codebuild_project = aws_codebuild.Project(self, "CodeBuildProject",
                                 role=codebuild_role, vpc=self.vpc, security_groups=[self.outbound_security_group],
                                 subnet_selection=subnet_selection, project_name=f"mlops-codebuild-project",
                                 environment=aws_codebuild.BuildEnvironment(
@@ -351,7 +353,7 @@ class ModelDevelopment(Stack):
                                     build_image=aws_codebuild.LinuxBuildImage.from_code_build_image_id("aws/codebuild/amazonlinux2-x86_64-standard:3.0")
                                 ),
                                 environment_variables={
-                                    "AWS_DEFAULT_REGION": aws_codebuild.BuildEnvironmentVariable(value=self.region),
+                                    "AWS_DEFAULT_REGION": aws_codebuild.BuildEnvironmentVariable(value=self.acc_region),
                                     "AWS_ACCOUNT_ID": aws_codebuild.BuildEnvironmentVariable(value=self.account_id),
                                     "IMAGE_REPO_NAME": aws_codebuild.BuildEnvironmentVariable(value=ecr_repository.repository_name),
                                 },
@@ -426,7 +428,7 @@ class ModelDevelopment(Stack):
                                                             "logs:CreateLogStream"
                                                         ],
                                                         resources=[
-                                                            f"arn:aws:logs:{self.region}:{self.account_id}:log-group:/aws/lambda/*"
+                                                            f"arn:aws:logs:{self.acc_region}:{self.account_id}:log-group:/aws/lambda/*"
                                                         ]
                                                     ),
                                                     aws_iam.PolicyStatement(
@@ -517,9 +519,7 @@ class ModelDevelopment(Stack):
                                                         "SecurityGroupId": self.outbound_security_group.security_group_id,
                                                         "Subnet0": subnets_ids[0],
                                                         "Subnet1": subnets_ids[1],
-                                                        "Subnet2": subnets_ids[2],
-                                                        "Subnet3": subnets_ids[3],
-                                                        "Region": self.region,
+                                                        "Region": self.acc_region,
                                                         "AccountId": self.account_id,
                                                         "ArtifactsBucket": artifacts_bucket.bucket_name,
                                                         "SelfLambdaName": training_lambda_name
@@ -586,7 +586,7 @@ class ModelDevelopment(Stack):
                                                  deploy_options=aws_apigateway.StageOptions(stage_name="prod"),
                                                  endpoint_configuration=aws_apigateway.EndpointConfiguration(
                                                      types=[aws_apigateway.EndpointType.PRIVATE],
-                                                     vpc_endpoint=[vpc_endpoint]
+                                                     vpc_endpoints=[vpc_endpoint]
                                                  ))
         
         # Define Integration Lambda with API Gateway
@@ -619,6 +619,10 @@ class ModelDevelopment(Stack):
                   value=fargate_cluster.cluster_arn,
                   export_name="FargateClusterARN")
         
+        CfnOutput(self, "FargateClusterName", description="Name of the Fargate Cluster",
+                  value=fargate_cluster.cluster_name,
+                  export_name="FargateClusterName")
+        
         CfnOutput(self, "FargateSecurityGroupExport", description="ID of the Fargate Security Group",
                   value=fargate_security_group.security_group_id,
                   export_name="FargateSecurityGroupId")
@@ -631,9 +635,17 @@ class ModelDevelopment(Stack):
                   value=hosted_zone.hosted_zone_id,
                   export_name="HostedZoneId")
         
+        CfnOutput(self, "HostedZoneNameExport", description="Name of the Route53 Hosted Zone",
+                  value=hosted_zone_name,
+                  export_name="HostedZoneName")
+        
         CfnOutput(self, "ECRRepositoryArn", description="Arn of the ECR Repository",
                   value=ecr_repository.repository_arn,
                   export_name="ECRRepositoryArn")
+        
+        CfnOutput(self, "ECRRepositoryNameExport", description="Name of the ECR Repository",
+                  value=ecr_repository.repository_name,
+                  export_name="ECRRepositoryName")
         
         CfnOutput(self, "SagemakerRoleArn", description="Arn of the Sagemaker Role",
                   value=sagemaker_role.role_arn,
@@ -643,7 +655,11 @@ class ModelDevelopment(Stack):
                   value=api.rest_api_id,
                   export_name="APIid")
         
-        CfnOutput(self, "ArtifactsBucket", description="Name of the Artifacts Bucket",
+        CfnOutput(self, "APIRoot", description="Root Resource of the REST API",
+                  value=api.rest_api_root_resource_id,
+                  export_name="APIRoot")
+        
+        CfnOutput(self, "ArtifactsBucketExport", description="Name of the Artifacts Bucket",
                   value=artifacts_bucket.bucket_name,
                   export_name="ArtifactsBucketName")
         
