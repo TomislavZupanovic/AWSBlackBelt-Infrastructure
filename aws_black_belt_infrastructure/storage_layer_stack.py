@@ -223,6 +223,7 @@ class StorageLayer(Stack):
                                                                             "database_name": glue_database.database_name,
                                                                             "file_key": aws_stepfunctions.JsonPath.string_at("$.file_key"),
                                                                             "bucket": aws_stepfunctions.JsonPath.string_at("$.bucket"),
+                                                                            "ingest_type": aws_stepfunctions.JsonPath.string_at("$.ingest_type"),
                                                                             "--additional-python-modules": "awswrangler"
                                                                        }
                                                                    ),
@@ -234,6 +235,8 @@ class StorageLayer(Stack):
                                                                            "database_name": glue_database.database_name,
                                                                            "file_key": aws_stepfunctions.JsonPath.string_at("$.file_key"),
                                                                            "bucket": aws_stepfunctions.JsonPath.string_at("$.bucket"),
+                                                                           "file_name": aws_stepfunctions.JsonPath.string_at("$.file_name"),
+                                                                           "ingest_type": aws_stepfunctions.JsonPath.string_at("$.ingest_type"),
                                                                            "--additional-python-modules": "awswrangler,lakefs_client"
                                                                        }
                                                                    ))
