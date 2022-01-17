@@ -83,11 +83,14 @@ if __name__ == '__main__':
         curated_data = add_timestamp(raw_data)
         data_schema['timestamp'] = "timestamp"
     else:
-        curated_data = create_target(raw_data)
-        data_schema['rul'] = 'int'
+        if 'test' in filename:
+            table = f"mlops-curated-test-data-{ingest_type}"
+        else:
+            curated_data = create_target(raw_data)
+            table = f"mlops-curated-data-{ingest_type}"
+            data_schema['rul'] = 'int'
 
     # Save transformed data to parquet format
     path = f"s3://{args['bucket']}/curated/{ingest_type}/parquet/{filename.replace('.csv', '.parquet')}"
-    table = f"mlops-curated-data-{ingest_type}"
     awswrangler.s3.to_parquet(curated_data, path=path, dataset=True, mode='append', 
                             database=args['database_name'], table=table, partition_cols=['unit'], dtype=data_schema)
