@@ -39,9 +39,10 @@ class ModelDevelopment(Stack):
         #===========================================================================================================================
 
         # Import VPC and subnets
-        self.vpc = aws_ec2.Vpc.from_lookup(self, "MainVPC", vpc_name="aast-innovation-vpc")
+        self.vpc = aws_ec2.Vpc.from_lookup(self, "MainVPC", vpc_name=parameters['VPCName'])
         subnets = self.vpc.private_subnets
-        subnets_ids = [subnet.subnet_id for subnet in subnets]
+        all_private_subnets = [subnet.subnet_id for subnet in subnets]
+        subnets_ids = [parameters["Subnet1_Id"], parameters["Subnet2_Id"]]
         
         # Define Security Group with allowed outbound traffic
         self.outbound_security_group = aws_ec2.SecurityGroup(self, "OutboundSecurityGroup",
@@ -59,6 +60,11 @@ class ModelDevelopment(Stack):
             security_groups=[vpc_endpoint_security_group]
         )
 
+        # Define Subnet Selection
+        selected_subnets = [aws_ec2.Subnet.from_subnet_id(self, "ImportedSubnet1", subnet_id=parameters["Subnet1_Id"]),
+                            aws_ec2.Subnet.from_subnet_id(self, "ImportedSubnet2", subnet_id=parameters["Subnet2_Id"])]
+        subnet_selection = aws_ec2.SubnetSelection(subnets=selected_subnets)
+        
         #===========================================================================================================================
         #=========================================================S3================================================================
         #===========================================================================================================================
@@ -117,10 +123,7 @@ class ModelDevelopment(Stack):
                                                                                                            aws_rds.AuroraPostgresEngineVersion.VER_12_4),
                                                       credentials=aws_rds.Credentials.from_secret(mlflow_db_secret),
                                                       vpc=self.vpc,
-                                                      vpc_subnets=aws_ec2.SubnetSelection(
-                                                          one_per_az=True,
-                                                          subnet_type=aws_ec2.SubnetType.PRIVATE_WITH_NAT  # TODO: Double-check
-                                                      ),
+                                                      vpc_subnets=subnet_selection,
                                                       security_groups=[aurora_security_group],
                                                       default_database_name=mlflow_database_name,
                                                       cluster_identifier="mlops-mlflow")
@@ -279,10 +282,7 @@ class ModelDevelopment(Stack):
             self, "MLflowLoadBalancedService", assign_public_ip=False, cpu=1024, 
             memory_limit_mib=4096, security_groups=[fargate_security_group],
             task_definition=mlflow_task_definition, cluster=fargate_cluster,
-            task_subnets=aws_ec2.SubnetSelection(
-                one_per_az=True,
-                subnet_type=aws_ec2.SubnetType.PRIVATE_WITH_NAT  # TODO: Double-check
-            ),
+            task_subnets=subnet_selection,
             desired_count=1, listener_port=80, domain_zone=hosted_zone,
             domain_name="mlflow", load_balancer_name="mlops-mlflow-load-balancer",
             open_listener=False, public_load_balancer=False, 
@@ -339,10 +339,6 @@ class ModelDevelopment(Stack):
         codebuild_role = aws_iam.Role(self, "CodeBuildRole", role_name="mlops-codebuild-role",
                                     assumed_by=aws_iam.ServicePrincipal("codebuild.amazonaws.com"),
                                     managed_policies=[codebuild_policy])
-        
-        # Define Subnet Selection for CodeBuild
-        subnet_selection = aws_ec2.SubnetSelection(one_per_az=True,
-                                                   subnet_type=aws_ec2.SubnetType.PRIVATE_WITH_NAT)
         
         # Define the CodeBuild Project for GitHub Repository
         codebuild_project = aws_codebuild.Project(self, "CodeBuildProject",

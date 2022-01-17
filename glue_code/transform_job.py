@@ -1,15 +1,9 @@
 import sys
-import io
-import os
 from datetime import datetime, timedelta
 
 import pandas as pd
 from awsglue.utils import getResolvedOptions
 import awswrangler
-
-import lakefs_client
-from lakefs_client import models
-from lakefs_client.client import LakeFSClient
 
 
 def add_timestamp(splitted_data: pd.DataFrame) -> pd.DataFrame:
@@ -62,14 +56,6 @@ def create_target(raw_data: pd.DataFrame) -> pd.DataFrame:
 
 
 if __name__ == '__main__':
-    # lakeFS credentials and endpoint
-    configuration = lakefs_client.Configuration()
-    configuration.username = ''
-    configuration.password = ''
-    configuration.host = 'http://localhost:8000' # TODO
-
-    lfs_client = LakeFSClient(configuration)
-
     # Get the Arguments
     args = getResolvedOptions(sys.argv,
                             ['JOB_NAME',
@@ -101,26 +87,7 @@ if __name__ == '__main__':
         data_schema['rul'] = 'int'
 
     # Save transformed data to parquet format
-    path = f"s3://{args['bucket']}/curated/parquet"
+    path = f"s3://{args['bucket']}/curated/{ingest_type}/parquet/{filename.replace('.csv', '.parquet')}"
     table = f"mlops-curated-data-{ingest_type}"
     awswrangler.s3.to_parquet(curated_data, path=path, dataset=True, mode='append', 
                             database=args['database_name'], table=table, partition_cols=['unit'], dtype=data_schema)
-
-    # Save Dataframes locally
-    raw_data.to_csv('raw_data.csv')
-    curated_data.to_csv('curated.csv')
-
-    # Save transformed data to the LakeFS
-    with open('raw_data.csv', 'rb') as data:
-        lfs_client.objects.upload_object(repository='PredictiveMaintenance', branch='main', 
-                                    path=f"{ingest_type}/raw/{filename.split('.')[0]}.csv", content=data)
-    with open('curated.csv', 'rb') as data:
-        lfs_client.objects.upload_object(repository='PredictiveMaintenance', branch='main', 
-                                    path=f"{ingest_type}/curated/{filename.split('.')[0]}.csv", content=data)
-    os.remove('curated.csv')
-    os.remove('raw_data.csv')
-
-    # Commit the data upload
-    lfs_client.commits.commit(repository='PredictiveMaintenance', branch='main',
-                    commit_creation=models.CommitCreation(message='Data added to the LakeFS', metadata={'ingest_type': ingest_type}))
-

@@ -36,13 +36,19 @@ class InferenceStack(Stack):
         #===========================================================================================================================
 
         # Import VPC and subnets
-        self.vpc = aws_ec2.Vpc.from_lookup(self, "MainVPC", vpc_name="aast-innovation-vpc")
+        self.vpc = aws_ec2.Vpc.from_lookup(self, "MainVPC", vpc_name=parameters['VPCName'])
         subnets = self.vpc.private_subnets
-        subnets_ids = [subnet.subnet_id for subnet in subnets]
+        all_private_subnets = [subnet.subnet_id for subnet in subnets]
+        subnets_ids = [parameters["Subnet1_Id"], parameters["Subnet2_Id"]]
         
         # Import Security Group with allowed outbound traffic from ModelDevelopmnet Stack
         self.outbound_security_group = aws_ec2.SecurityGroup.from_security_group_id(self, "ImportedSecurityGroup",
                                                                                     security_group_id=Fn.import_value("SecurityGroupId"))
+        
+        # Define Subnet Selection
+        selected_subnets = [aws_ec2.Subnet.from_subnet_id(self, "ImportedSubnet1", subnet_id=parameters["Subnet1_Id"]),
+                            aws_ec2.Subnet.from_subnet_id(self, "ImportedSubnet2", subnet_id=parameters["Subnet2_Id"])]
+        subnet_selection = aws_ec2.SubnetSelection(subnets=selected_subnets)
         
         #===========================================================================================================================
         #=========================================================ECR===============================================================
@@ -194,10 +200,7 @@ class InferenceStack(Stack):
                                                       engine=aws_rds.DatabaseClusterEngine.AURORA_MYSQL,
                                                       credentials=aws_rds.Credentials.from_secret(grafana_db_secret),
                                                       vpc=self.vpc,
-                                                      vpc_subnets=aws_ec2.SubnetSelection(
-                                                          one_per_az=True,
-                                                          subnet_type=aws_ec2.SubnetType.PRIVATE_WITH_NAT  # TODO: Double-check
-                                                      ),
+                                                      vpc_subnets=subnet_selection,
                                                       security_groups=[aurora_security_group],
                                                       default_database_name=grafana_database_name,
                                                       cluster_identifier="mlops-grafana")
@@ -258,10 +261,7 @@ class InferenceStack(Stack):
             self, "GrafanaLoadBalancedService", assign_public_ip=False, cpu=1024, 
             memory_limit_mib=4096, security_groups=[fargate_security_group],
             task_definition=grafana_task_definition, cluster=fargate_cluster,
-            task_subnets=aws_ec2.SubnetSelection(
-                one_per_az=True,
-                subnet_type=aws_ec2.SubnetType.PRIVATE_WITH_NAT  # TODO: Double-check
-            ),
+            task_subnets=subnet_selection,
             desired_count=1, listener_port=80, domain_zone=hosted_zone,
             domain_name="grafana", load_balancer_name="mlops-grafana-load-balancer",
             open_listener=False, public_load_balancer=False, 

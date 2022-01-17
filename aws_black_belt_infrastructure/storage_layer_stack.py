@@ -34,13 +34,19 @@ class StorageLayer(Stack):
         #===========================================================================================================================
 
         # Import VPC and subnets
-        self.vpc = aws_ec2.Vpc.from_lookup(self, "MainVPC", vpc_name="aast-innovation-vpc")
+        self.vpc = aws_ec2.Vpc.from_lookup(self, "MainVPC", vpc_name=parameters['VPCName'])
         subnets = self.vpc.private_subnets
-        subnets_ids = [subnet.subnet_id for subnet in subnets]
+        all_private_subnets = [subnet.subnet_id for subnet in subnets]
+        subnets_ids = [parameters["Subnet1_Id"], parameters["Subnet2_Id"]]
         
         # Import Security Group with allowed outbound traffic from ModelDevelopmnet Stack
         self.outbound_security_group = aws_ec2.SecurityGroup.from_security_group_id(self, "ImportedSecurityGroup",
                                                                                     security_group_id=Fn.import_value("SecurityGroupId"))
+        
+        # Define Subnet Selection
+        selected_subnets = [aws_ec2.Subnet.from_subnet_id(self, "ImportedSubnet1", subnet_id=parameters["Subnet1_Id"]),
+                            aws_ec2.Subnet.from_subnet_id(self, "ImportedSubnet2", subnet_id=parameters["Subnet2_Id"])]
+        subnet_selection = aws_ec2.SubnetSelection(subnets=selected_subnets)
         
         #===========================================================================================================================
         #=========================================================S3================================================================
@@ -223,6 +229,7 @@ class StorageLayer(Stack):
                                                                             "database_name": glue_database.database_name,
                                                                             "file_key": aws_stepfunctions.JsonPath.string_at("$.file_key"),
                                                                             "bucket": aws_stepfunctions.JsonPath.string_at("$.bucket"),
+                                                                            "file_name": aws_stepfunctions.JsonPath.string_at("$.file_name"),
                                                                             "ingest_type": aws_stepfunctions.JsonPath.string_at("$.ingest_type"),
                                                                             "--additional-python-modules": "awswrangler"
                                                                        }
@@ -237,7 +244,7 @@ class StorageLayer(Stack):
                                                                            "bucket": aws_stepfunctions.JsonPath.string_at("$.bucket"),
                                                                            "file_name": aws_stepfunctions.JsonPath.string_at("$.file_name"),
                                                                            "ingest_type": aws_stepfunctions.JsonPath.string_at("$.ingest_type"),
-                                                                           "--additional-python-modules": "awswrangler,lakefs_client"
+                                                                           "--additional-python-modules": "awswrangler"
                                                                        }
                                                                    ))
         
@@ -322,122 +329,9 @@ class StorageLayer(Stack):
         # Define the S3 Notifications to trigger Lambda
         storage_bucket.add_event_notification(aws_s3.EventType.OBJECT_CREATED, 
                                               aws_s3_notifications.LambdaDestination(etl_lambda),
-                                              aws_s3.NotificationKeyFilter(prefix="raw/csv/"))
+                                              aws_s3.NotificationKeyFilter(prefix="raw/partitioned/csv/"))
         
         storage_bucket.add_event_notification(aws_s3.EventType.OBJECT_CREATED, 
                                               aws_s3_notifications.LambdaDestination(etl_lambda),
                                               aws_s3.NotificationKeyFilter(prefix="raw/total/csv/"))
-        
-        #===========================================================================================================================
-        #=======================================================KMS & SECRET========================================================
-        #===========================================================================================================================
-        
-        # Import KMS key
-        kms_key = aws_kms.Key.from_key_arn(self, "ImportedKMSKey", key_arn=Fn.import_value("KMSKeyARN"))
-        
-        # Define the Secret for LakeFS Aurora DB
-        lakefs_db_secret = aws_secretsmanager.Secret(self, "LakeFSDBSecret", encryption_key=kms_key,
-                                                     description="Secret used for connecting to the LakeFS PostgreSQL database",
-                                                     secret_name="mlops-lakefs-db-secret",
-                                                     removal_policy=RemovalPolicy.DESTROY,
-                                                     generate_secret_string=aws_secretsmanager.SecretStringGenerator(
-                                                         generate_string_key="password",
-                                                         secret_string_template="{\"username\":\"lakefs-user\"}"
-                                                     ))
-        
-        
-        #===========================================================================================================================
-        #=======================================================AURORA==============================================================
-        #===========================================================================================================================
-        
-        # Import Aurora Security Group from Model Developmnet Stack
-        aurora_security_group = aws_ec2.SecurityGroup.from_security_group_id(self, "ImportedAuroraSecurityGroup",
-                                                     security_group_id=Fn.import_value("SecurityGroupId"))
-        
-        # Define LakeFS backend Aurora Database
-        lakefs_database_name = "LakeFS"
-        lakefs_backend_db = aws_rds.ServerlessCluster(self, "LakeFSBackendDB",
-                                                      engine=aws_rds.DatabaseClusterEngine.aurora_postgres(version=
-                                                                                                           aws_rds.AuroraPostgresEngineVersion.VER_12_4),
-                                                      credentials=aws_rds.Credentials.from_secret(lakefs_db_secret),
-                                                      vpc=self.vpc,
-                                                      vpc_subnets=aws_ec2.SubnetSelection(
-                                                          one_per_az=True,
-                                                          subnet_type=aws_ec2.SubnetType.PRIVATE_WITH_NAT  # TODO: Double-check
-                                                      ),
-                                                      security_groups=[aurora_security_group],
-                                                      default_database_name=lakefs_database_name,
-                                                      cluster_identifier="mlops-lakefs")
-        # Define the LakeFS DB endpoint
-        lakefs_db_endpoint = lakefs_backend_db.cluster_endpoint
-        
-        #===========================================================================================================================
-        #=======================================================FARGATE=============================================================
-        #===========================================================================================================================
-        
-        # Import the Fargate Cluster from Model Development stack
-        fargate_cluster = aws_ecs.Cluster.from_cluster_attributes(self, "ImportedFargateCluster",
-                                                                  cluster_arn=Fn.import_value("FargateClusterARN"),
-                                                                  cluster_name=Fn.import_value("FargateClusterName"),
-                                                                  security_groups=[self.outbound_security_group],
-                                                                  vpc=self.vpc)
-        
-        # Import the Fargate Role from Model Development Stack
-        fargate_role = aws_iam.Role.from_role_arn(self, "ImportedFargateRole", 
-                                                  role_arn=Fn.import_value("FargateRoleARN"))
-        
-        # Import the Fargate Security Group from Model Development Stack
-        fargate_security_group =  aws_ec2.SecurityGroup.from_security_group_id(self, "ImportedFargateSecurityGroup",
-                                                     security_group_id=Fn.import_value("FargateSecurityGroupId"))
-        
-        #===========================================================================================================================
-        #=======================================================LAKEFS==============================================================
-        #===========================================================================================================================
-        
-        # Import the Route53 Hosted Zone from the Development Stack
-        hosted_zone = aws_route53.HostedZone.from_hosted_zone_attributes(self, "ImportedHostedZone",
-                                                                 hosted_zone_id=Fn.import_value("HostedZoneId"),
-                                                                 zone_name=Fn.import_value("HostedZoneName"))
-        
-        # Define LakeFS Task Definition
-        lakefs_task_definition = aws_ecs.FargateTaskDefinition(self, "LakeFSTaskDefinition", cpu=1024, ephemeral_storage_gib=30,
-                                                               memory_limit_mib=4096, execution_role=fargate_role,
-                                                               family="mlops-lakefs-task", task_role=fargate_role)
-        
-        # Define the LakeFS Task Container 
-        lakefs_task_definition.add_container("LakeFSImageContainer",
-                                             image=aws_ecs.ContainerImage.from_asset(directory="lakefs"),
-                                             container_name="lakefs-task-container", privileged=False,
-                                             port_mappings=[aws_ecs.PortMapping(container_port=8000, protocol=aws_ecs.Protocol.TCP)],
-                                             logging=aws_ecs.LogDriver.aws_logs(stream_prefix="lakefs-task"),
-                                             secrets={
-                                                 "DB_USERNAME": aws_ecs.Secret.from_secrets_manager(lakefs_db_secret, "username"),
-                                                 "DB_PASSWORD": aws_ecs.Secret.from_secrets_manager(lakefs_db_secret, "password")
-                                             },
-                                             environment={
-                                                 "HOST": lakefs_db_endpoint.hostname,
-                                                 "PORT": "5432",
-                                                 "DATABASE": lakefs_database_name,
-                                             })
-        
-        # Define the Load Balanced Service for LakeFS
-        lakefs_load_balanced_service = aws_ecs_patterns.ApplicationLoadBalancedFargateService(
-            self, "LakeFSLoadBalancedService", assign_public_ip=False, cpu=1024, 
-            memory_limit_mib=4096, security_groups=[fargate_security_group],
-            task_definition=lakefs_task_definition, cluster=fargate_cluster,
-            task_subnets=aws_ec2.SubnetSelection(
-                one_per_az=True,
-                subnet_type=aws_ec2.SubnetType.PRIVATE_WITH_NAT  # TODO: Double-check
-            ),
-            desired_count=1, listener_port=80, domain_zone=hosted_zone,
-            domain_name="lakefs", load_balancer_name="mlops-lakefs-load-balancer",
-            open_listener=False, public_load_balancer=False, 
-            service_name="mlops-lekefs-service",
-            health_check_grace_period=Duration.minutes(3)
-        )
-        # Attach Fargate Security Group to the LakeFS Load Balancer
-        lakefs_load_balanced_service.load_balancer.add_security_group(fargate_security_group)
-        lakefs_load_balanced_service.target_group.configure_health_check(path="/_health", interval=Duration.seconds(60),
-                                                                         timeout=Duration.seconds(10))
-        
         

@@ -15,7 +15,10 @@ parameters = {"Owner": "Tomislav Zupanovic",
               "AccountId": "167321155121",
               "Region": "us-east-1",
               "VPCEndpointId": "vpce-0a7e4031f9928bdbc",
-              "VPCSecurityGroupId": "sg-00068c8858ad5df0b"}
+              "VPCSecurityGroupId": "sg-00068c8858ad5df0b",
+              "VPCName": "aast-innovation-vpc",
+              "Subnet1_Id": "subnet-0d964588c17bea68c",  # If specific Subnet selection is needed
+              "Subnet2_Id": "subnet-0a3e3e2004c57c418"}  # If specific Subnet selection is needed
 
 # Define the CDK Environment parameters
 environment = cdk.Environment(account=parameters["AccountId"], region=parameters["Region"])
