@@ -2,7 +2,7 @@ FROM continuumio/miniconda3:4.10.3
 
 RUN conda install -y -c conda-forge postgresql
 
-RUN pip install mlflow>=1.22.0 \
+RUN pip install mlflow>=1.23.0 \
     && pip install numpy==1.21.2 \
     && pip install scipy \
     && pip install pandas==1.3.3 \

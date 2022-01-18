@@ -35,4 +35,4 @@ raw_data.columns = column_names
 path = f"s3://{args['bucket']}/raw/{ingest_type}/parquet/{filename.replace('.csv', '.parquet')}"
 table = f"mlops-raw-data-{ingest_type}"
 awswrangler.s3.to_parquet(raw_data, path=path, dataset=True, mode='append', 
-                        database=args['database_name'], table=table, partition_cols=['unit'])
+                        database=args['database_name'], table=table)

@@ -9,7 +9,7 @@ from aws_cdk import (
     aws_ecs_patterns,
     aws_lambda,
     aws_ecr,
-    aws_route53,
+    aws_route53, aws_codecommit,
     aws_codebuild, aws_apigateway,
     RemovalPolicy, Duration,
     Tags, Stack, CfnOutput
@@ -50,20 +50,22 @@ class ModelDevelopment(Stack):
                                                         allow_all_outbound=True, security_group_name="mlops-security-group")
         
         # Import VPC Endpoint Security Group
-        vpc_endpoint_security_group = aws_ec2.SecurityGroup.from_security_group_id(
-            self, "VPCEndpointSecurityGroupImport", security_group_id=self.vpc_security_group_id
-        )
-        
-        # Import VPC Endpoint for API Gateway
-        vpc_endpoint = aws_ec2.InterfaceVpcEndpoint.from_interface_vpc_endpoint_attributes(
-            self, "VPCEndpointImport", port=443, vpc_endpoint_id=self.vpc_endpoint_id,
-            security_groups=[vpc_endpoint_security_group]
-        )
+        # vpc_endpoint_security_group = aws_ec2.SecurityGroup.from_security_group_id(
+        #     self, "VPCEndpointSecurityGroupImport", security_group_id=self.vpc_security_group_id
+        # )
 
         # Define Subnet Selection
-        selected_subnets = [aws_ec2.Subnet.from_subnet_id(self, "ImportedSubnet1", subnet_id=parameters["Subnet1_Id"]),
-                            aws_ec2.Subnet.from_subnet_id(self, "ImportedSubnet2", subnet_id=parameters["Subnet2_Id"])]
+        selected_subnets = [aws_ec2.Subnet.from_subnet_attributes(self, "ImportedSubnet1", subnet_id=parameters["Subnet1_Id"],
+                                                                  availability_zone='us-east-1a', route_table_id='rtb-0e9876e2b4570bf40'),
+                            aws_ec2.Subnet.from_subnet_attributes(self, "ImportedSubnet2", subnet_id=parameters["Subnet2_Id"],
+                                                                  availability_zone='us-east-1b', route_table_id='rtb-092c66b81271f6fde')]
         subnet_selection = aws_ec2.SubnetSelection(subnets=selected_subnets)
+        
+        # VPC Endpoint for API Gateway
+        vpc_endpoint = aws_ec2.InterfaceVpcEndpoint(self, "VPCEndpointInterface", 
+                                                    vpc=self.vpc, service=aws_ec2.InterfaceVpcEndpointService(
+                                                        name="com.amazonaws.us-east-1.execute-api", port=443
+                                                    ), subnets=subnet_selection)
         
         #===========================================================================================================================
         #=========================================================S3================================================================
@@ -80,28 +82,30 @@ class ModelDevelopment(Stack):
         #===========================================================================================================================
         
         # Define the KMS key for Secret Encryption/Decryption
-        kms_key = aws_kms.Key(self, "MLflowDBSecretKey", description="Key used for MLflow DB Secret",
-                                 enabled=True, enable_key_rotation=False,
-                                 policy=aws_iam.PolicyDocument(
-                                            statements=[aws_iam.PolicyStatement(
-                                                actions=["kms:Create*", 
-                                                         "kms:Describe*", 
-                                                         "kms:Enable*", 
-                                                         "kms:List*", 
-                                                         "kms:Put*"
-                                                ],
-                                                principals=[aws_iam.AccountRootPrincipal()],
-                                                resources=["*"]
-                                            )]), removal_policy=RemovalPolicy.DESTROY)
+        # kms_key = aws_kms.Key(self, "MLflowDBSecretKey", description="Key used for MLflow DB Secret",
+        #                          enabled=True, enable_key_rotation=False,
+        #                          policy=aws_iam.PolicyDocument(
+        #                                     statements=[aws_iam.PolicyStatement(
+        #                                         actions=["kms:Create*", 
+        #                                                  "kms:Describe*", 
+        #                                                  "kms:Enable*", 
+        #                                                  "kms:List*", 
+        #                                                  "kms:Put*"
+        #                                         ],
+        #                                         principals=[aws_iam.AccountRootPrincipal()],
+        #                                         resources=["*"]
+        #                                     )])) # removal_policy=RemovalPolicy.DESTROY)
         
         # Define the Secret for MLflow Aurora DB
-        mlflow_db_secret = aws_secretsmanager.Secret(self, "MLflowDBSecret", encryption_key=kms_key,
+        mlflow_db_secret = aws_secretsmanager.Secret(self, "MLflowDBSecret",
                                                      description="Secret used for connecting to the MLflow PostgreSQL database",
                                                      secret_name="mlops-mlflow-db-secret",
                                                      removal_policy=RemovalPolicy.DESTROY,
                                                      generate_secret_string=aws_secretsmanager.SecretStringGenerator(
+                                                         exclude_characters='/@"\' ',
+                                                         exclude_punctuation=True,
                                                          generate_string_key="password",
-                                                         secret_string_template="{\"username\":\"mlflow-user\"}"
+                                                         secret_string_template="{\"username\":\"mlflow_user\"}"
                                                      ))
         
         #===========================================================================================================================
@@ -120,7 +124,7 @@ class ModelDevelopment(Stack):
         mlflow_database_name = "MLflowBackend"
         mlflow_backend_db = aws_rds.ServerlessCluster(self, "MLflowBackendDB",
                                                       engine=aws_rds.DatabaseClusterEngine.aurora_postgres(version=
-                                                                                                           aws_rds.AuroraPostgresEngineVersion.VER_12_4),
+                                                                                                           aws_rds.AuroraPostgresEngineVersion.VER_10_14),
                                                       credentials=aws_rds.Credentials.from_secret(mlflow_db_secret),
                                                       vpc=self.vpc,
                                                       vpc_subnets=subnet_selection,
@@ -298,8 +302,12 @@ class ModelDevelopment(Stack):
         
         # Define the ECR Repository to contain all project images
         ecr_repository = aws_ecr.Repository(self, "ECRRepository",
-                                            repository_name="mlops-image-repository",
+                                            repository_name="mlops_image_repository",
                                             removal_policy=RemovalPolicy.DESTROY)
+        
+        # Import the CodeCommit repo
+        code_repository = aws_codecommit.Repository.from_repository_arn(self, "CodeRepository", 
+                                                                        repository_arn=parameters['CodeCommitRepoARN'])
         
         # Define CodeBuild policy
         codebuild_policy = aws_iam.ManagedPolicy(self, "CodeBuildPolicy", description="Used for Codebuild to create and push images to ECR",
@@ -343,7 +351,7 @@ class ModelDevelopment(Stack):
         # Define the CodeBuild Project for GitHub Repository
         codebuild_project = aws_codebuild.Project(self, "CodeBuildProject",
                                 role=codebuild_role, vpc=self.vpc, security_groups=[self.outbound_security_group],
-                                subnet_selection=subnet_selection, project_name=f"mlops-codebuild-project",
+                                subnet_selection=subnet_selection, project_name=f"mlops_codebuild_project",
                                 environment=aws_codebuild.BuildEnvironment(
                                     privileged=True,
                                     build_image=aws_codebuild.LinuxBuildImage.from_code_build_image_id("aws/codebuild/amazonlinux2-x86_64-standard:3.0")
@@ -359,9 +367,8 @@ class ModelDevelopment(Stack):
                                                                 removal_policy=RemovalPolicy.DESTROY,
                                                                 retention=aws_logs.RetentionDays.ONE_WEEK)
                                 )), description=f"CodeBuild used to create and push ML images",
-                                source=aws_codebuild.Source.git_hub(owner="TomislavZupanovic", repo="AWSBlackBelt-Capstone",
-                                                                    branch_or_ref="main", webhook=True,
-                                                                    identifier=f"codebuild-github-source"))
+                                source=aws_codebuild.Source.code_commit(repository=code_repository, branch_or_ref='master', 
+                                                                        identifier="mlops_source_repo"))
         
         #===========================================================================================================================
         #=========================================================SAGEMAKER=========================================================
@@ -609,9 +616,9 @@ class ModelDevelopment(Stack):
                   value=aurora_security_group.security_group_id,
                   export_name="AuroraSecurityGroupId")
         
-        CfnOutput(self, "KMSKeyARN", description="ARN of the KMS Key",
-                  value=kms_key.key_arn,
-                  export_name="KMSKeyARN")
+        # CfnOutput(self, "KMSKeyARN", description="ARN of the KMS Key",
+        #           value=kms_key.key_arn,
+        #           export_name="KMSKeyARN")
         
         CfnOutput(self, "FargateClusterARN", description="ARN of the Fargate Cluster",
                   value=fargate_cluster.cluster_arn,

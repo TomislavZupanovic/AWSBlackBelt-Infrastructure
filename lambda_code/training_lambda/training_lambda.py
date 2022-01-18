@@ -96,7 +96,7 @@ def start_training(image_tag: str, parameters: dict) -> dict:
     current_time = datetime.now().strftime("%y-%m-%d-%H-%M-%S")
     name = f"model-training-{current_time}"
     image = os.environ['ImageUri'] + ':' + image_tag
-    environment = {}
+    environment = {'ImageTag': image_tag}
     for name, value in parameters.items():
         environment[name] = value
     # Define the Sagemaker Processing Job parameters

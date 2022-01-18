@@ -15,18 +15,6 @@
             "routeTableId": "rtb-0e9876e2b4570bf40"
           },
           {
-            "subnetId": "subnet-091b77d25511eac80",
-            "cidr": "10.13.20.0/24",
-            "availabilityZone": "us-east-1a",
-            "routeTableId": "rtb-0e9876e2b4570bf40"
-          },
-          {
-            "subnetId": "subnet-0351e5df8aa2df0bb",
-            "cidr": "10.13.21.0/24",
-            "availabilityZone": "us-east-1b",
-            "routeTableId": "rtb-092c66b81271f6fde"
-          },
-          {
             "subnetId": "subnet-0a3e3e2004c57c418",
             "cidr": "10.13.11.0/24",
             "availabilityZone": "us-east-1b",

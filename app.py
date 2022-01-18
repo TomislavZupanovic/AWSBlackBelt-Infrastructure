@@ -17,6 +17,7 @@ parameters = {"Owner": "Tomislav Zupanovic",
               "VPCEndpointId": "vpce-0a7e4031f9928bdbc",
               "VPCSecurityGroupId": "sg-00068c8858ad5df0b",
               "VPCName": "aast-innovation-vpc",
+              "CodeCommitRepoARN": "arn:aws:codecommit:us-east-1:167321155121:AWSBlackBelt-PredictiveMaintenance",
               "Subnet1_Id": "subnet-0d964588c17bea68c",  # If specific Subnet selection is needed
               "Subnet2_Id": "subnet-0a3e3e2004c57c418"}  # If specific Subnet selection is needed
 

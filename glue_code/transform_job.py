@@ -93,4 +93,4 @@ if __name__ == '__main__':
     # Save transformed data to parquet format
     path = f"s3://{args['bucket']}/curated/{ingest_type}/parquet/{filename.replace('.csv', '.parquet')}"
     awswrangler.s3.to_parquet(curated_data, path=path, dataset=True, mode='append', 
-                            database=args['database_name'], table=table, partition_cols=['unit'], dtype=data_schema)
+                            database=args['database_name'], table=table, dtype=data_schema)
