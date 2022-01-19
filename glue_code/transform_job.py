@@ -7,12 +7,13 @@ from awsglue.utils import getResolvedOptions
 import awswrangler
 
 
-def add_timestamp(splitted_data: pd.DataFrame) -> pd.DataFrame:
+def add_timestamp(input_data: pd.DataFrame) -> pd.DataFrame:
     """ Adds simulated timestamp the the ingested data to replicate 
         real life scenario
         :argument: splitted_data - Pandas Dataframe with data of 24 cycle split with all units
         :return: timestamp_data - Pandas Dataframe with timestamps for 24 cycle for all units
     """
+    splitted_data = input_data.copy()
     current_time = datetime.now()
     time_list = []
     # Get number of rows for one unit
@@ -93,14 +94,15 @@ if __name__ == '__main__':
     else:
         mode = 'overwrite'
         if 'test' in filename:
-            curated_data = raw_data
+            curated_data = raw_data.copy()
             table = "mlops-curated-test-data"
             path = f"s3://{args['bucket']}/curated/{ingest_type}/parquet/test"
+            data_schema['rul'] = 'int'
         else:
             curated_data = create_target(raw_data)
-            data_schema['rul'] = 'int'
             table = "mlops-curated-train-data"
             path = f"s3://{args['bucket']}/curated/{ingest_type}/parquet/train"
+            data_schema['rul'] = 'int'
 
     # Save transformed data to parquet format
     awswrangler.s3.to_parquet(curated_data, path=path, dataset=True, mode=mode, compression=None, 

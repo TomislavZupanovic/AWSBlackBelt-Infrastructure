@@ -34,6 +34,7 @@ raw_data.columns = column_names
 if ingest_type == 'total':
     mode = 'overwrite'
     if 'test' in filename:
+        raw_data.rename(columns={'sensor_22': 'rul'}, inplace=True)
         table = f"mlops-raw-test-data"
         path = f"s3://{args['bucket']}/raw/{ingest_type}/parquet/test"
     else:

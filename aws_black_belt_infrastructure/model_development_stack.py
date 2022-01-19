@@ -550,17 +550,17 @@ class ModelDevelopment(Stack):
                             ],
                             principals=[aws_iam.AnyPrincipal()]
                     ),
-                    # aws_iam.PolicyStatement(
-                    #         sid="AllowFromVPCLocations",
-                    #         effect=aws_iam.Effect.ALLOW,
-                    #         actions=[
-                    #             "execute-api:Invoke",
-                    #         ],
-                    #         resources=[
-                    #             "execute-api:/*"
-                    #         ],
-                    #         principals=[aws_iam.AnyPrincipal()]
-                    # ),
+                    aws_iam.PolicyStatement(
+                            sid="AllowFromVPCLocations",
+                            effect=aws_iam.Effect.ALLOW,
+                            actions=[
+                                "execute-api:Invoke",
+                            ],
+                            resources=[
+                                "execute-api:/*"
+                            ],
+                            principals=[aws_iam.AnyPrincipal()]
+                    ),
                     # aws_iam.PolicyStatement(
                     #         sid="DenyFromNonVPCLocations",
                     #         effect=aws_iam.Effect.DENY,
