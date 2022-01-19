@@ -1,6 +1,7 @@
 import sys
 from datetime import datetime, timedelta
 
+import time
 import pandas as pd
 from awsglue.utils import getResolvedOptions
 import awswrangler
@@ -66,11 +67,15 @@ if __name__ == '__main__':
                             'bucket'])
 
     # Define the path to the raw parquet file
-    # file_key = args['file_key'].replace('/csv', '/parquet')
-    file_key = args['file_key']
+    file_key = args['file_key'].replace('/csv/', '/parquet/').replace('.csv', '.parquet')
     ingest_type = args['ingest_type']
-    filename = args['file_name']
+    filename = args['file_name'].replace('.csv', '.parquet')
 
+    # Check if object exists
+    exists = awswrangler.s3.does_object_exist(f"s3://{args['bucket']}/{file_key}")
+    while not exists:
+        exists = awswrangler.s3.does_object_exist(f"s3://{args['bucket']}/{file_key}")
+        time.sleep(30)
     # Get the raw parquet data
     raw_data = awswrangler.s3.read_parquet(path=[f"s3://{args['bucket']}/{file_key}"])
 
@@ -91,6 +96,13 @@ if __name__ == '__main__':
             data_schema['rul'] = 'int'
 
     # Save transformed data to parquet format
-    path = f"s3://{args['bucket']}/curated/{ingest_type}/parquet/{filename.replace('.csv', '.parquet')}"
-    awswrangler.s3.to_parquet(curated_data, path=path, dataset=True, mode='append', 
-                            database=args['database_name'], table=table, dtype=data_schema)
+    dataset_path = f"s3://{args['bucket']}/curated/{ingest_type}/parquet"
+    if ingest_type == 'total':
+        mode = 'overwrite'
+    else:
+        mode = 'append'
+    awswrangler.s3.to_parquet(curated_data, path=dataset_path, dataset=True, mode=mode, compression=None, 
+                                database=args['database_name'], table=table, dtype=data_schema)
+    
+    file_path = f"s3://{args['bucket']}/curated/{ingest_type}/parquet/{filename}"
+    awswrangler.s3.to_parquet(curated_data, path=file_path)

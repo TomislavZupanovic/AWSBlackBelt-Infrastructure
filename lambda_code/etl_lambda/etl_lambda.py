@@ -14,7 +14,9 @@ def start_etl(bucket: str, file_key: str, ingest_type: str, file_name: str) -> d
     current_time = datetime.now().strftime("%y-%m-%d-%H-%M-%S")
     # Define parameters for Step Function
     input_parameters = {"bucket": bucket, "file_key": file_key, 
-                        "ingest_type": ingest_type, 'file_name': file_name}
+                        "ingest_type": ingest_type, 'file_name': file_name,
+                        "database_name": os.environ['GlueDatabaseName'],
+                        "--additional-python-modules": 'awswrangler'}
     # Start the Step Function
     execution_response = step_functions.start_execution(stateMachineArn=os.environ['StateMachineArn'],
                                                         name=f"ETL-{current_time}",

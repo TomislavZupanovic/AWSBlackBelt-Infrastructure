@@ -32,7 +32,14 @@ column_names = ['unit', 'cycle', 'altitude', 'mach', 'tra'] + [f'sensor_{i}' for
 raw_data.columns = column_names
 
 # Convert the csv data to the parquet format
-path = f"s3://{args['bucket']}/raw/{ingest_type}/parquet/{filename.replace('.csv', '.parquet')}"
+dataset_path = f"s3://{args['bucket']}/raw/{ingest_type}/parquet"
 table = f"mlops-raw-data-{ingest_type}"
-awswrangler.s3.to_parquet(raw_data, path=path, dataset=True, mode='append', 
-                        database=args['database_name'], table=table)
+if ingest_type == 'total':
+    mode = 'overwrite'
+else:
+    mode = 'append'
+awswrangler.s3.to_parquet(raw_data, path=dataset_path, dataset=True, mode=mode, compression=None, 
+                          database=args['database_name'], table=table)
+
+file_path = f"s3://{args['bucket']}/raw/{ingest_type}/parquet/{filename.replace('.csv', '.parquet')}"
+awswrangler.s3.to_parquet(raw_data, path=file_path)

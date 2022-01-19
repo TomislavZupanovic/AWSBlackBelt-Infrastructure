@@ -154,7 +154,7 @@ class StorageLayer(Stack):
                                        python_version=aws_glue.PythonVersion.THREE,
                                        script=aws_glue.Code.from_asset(path="glue_code/transform_job.py")
                                    ),
-                                   default_arguments={"--additional-python-modules": "awswrangler,lakefs_client"},
+                                   default_arguments={"--additional-python-modules": "awswrangler"},
                                    description="Job used to transform raw data into curated data",
                                    continuous_logging=aws_glue.ContinuousLoggingProps(enabled=True,
                                                                                       log_group=aws_logs.LogGroup(self, 
@@ -228,12 +228,12 @@ class StorageLayer(Stack):
         convert_job_step = aws_stepfunctions_tasks.GlueStartJobRun(self, "ConvertGlueJobStep", glue_job_name=convert_job.job_name,
                                                                    arguments=aws_stepfunctions.TaskInput.from_object(
                                                                        {
-                                                                            "database_name": glue_database.database_name,
-                                                                            "file_key": aws_stepfunctions.JsonPath.string_at("$.file_key"),
-                                                                            "bucket": aws_stepfunctions.JsonPath.string_at("$.bucket"),
-                                                                            "file_name": aws_stepfunctions.JsonPath.string_at("$.file_name"),
-                                                                            "ingest_type": aws_stepfunctions.JsonPath.string_at("$.ingest_type"),
-                                                                            "--additional-python-modules": "awswrangler"
+                                                                            "--database_name": aws_stepfunctions.JsonPath.string_at("$.database_name"),
+                                                                            "--file_key": aws_stepfunctions.JsonPath.string_at("$.file_key"),
+                                                                            "--bucket": aws_stepfunctions.JsonPath.string_at("$.bucket"),
+                                                                            "--file_name": aws_stepfunctions.JsonPath.string_at("$.file_name"),
+                                                                            "--ingest_type": aws_stepfunctions.JsonPath.string_at("$.ingest_type"),
+                                                                            "--additional-python-modules": aws_stepfunctions.JsonPath.string_at("$.--additional-python-modules")
                                                                        }
                                                                    ),
                                                                    result_path=aws_stepfunctions.JsonPath.DISCARD)
@@ -241,12 +241,12 @@ class StorageLayer(Stack):
         transform_job_step = aws_stepfunctions_tasks.GlueStartJobRun(self, "TransformGlueJobStep", glue_job_name=transform_job.job_name,
                                                                    arguments=aws_stepfunctions.TaskInput.from_object(
                                                                        {
-                                                                           "database_name": glue_database.database_name,
-                                                                           "file_key": aws_stepfunctions.JsonPath.string_at("$.file_key"),
-                                                                           "bucket": aws_stepfunctions.JsonPath.string_at("$.bucket"),
-                                                                           "file_name": aws_stepfunctions.JsonPath.string_at("$.file_name"),
-                                                                           "ingest_type": aws_stepfunctions.JsonPath.string_at("$.ingest_type"),
-                                                                           "--additional-python-modules": "awswrangler"
+                                                                           "--database_name": aws_stepfunctions.JsonPath.string_at("$.database_name"),
+                                                                           "--file_key": aws_stepfunctions.JsonPath.string_at("$.file_key"),
+                                                                           "--bucket": aws_stepfunctions.JsonPath.string_at("$.bucket"),
+                                                                           "--file_name": aws_stepfunctions.JsonPath.string_at("$.file_name"),
+                                                                           "--ingest_type": aws_stepfunctions.JsonPath.string_at("$.ingest_type"),
+                                                                           "--additional-python-modules": aws_stepfunctions.JsonPath.string_at("$.--additional-python-modules")
                                                                        }
                                                                    ))
         
@@ -321,7 +321,8 @@ class StorageLayer(Stack):
                                               code=aws_lambda.Code.from_asset("lambda_code/etl_lambda"),
                                               environment={
                                                         "SecurityGroupId": self.outbound_security_group.security_group_id,
-                                                        "StateMachineArn": state_machine.state_machine_arn
+                                                        "StateMachineArn": state_machine.state_machine_arn,
+                                                        "GlueDatabaseName": glue_database.database_name
                                                   },
                                               timeout=Duration.minutes(5), 
                                               function_name="mlops-etl-lambda",
