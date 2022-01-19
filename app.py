@@ -27,7 +27,7 @@ environment = cdk.Environment(account=parameters["AccountId"], region=parameters
 # Initialize the Stacks
 ModelDevelopment(app, "ModelDevelopmentStack", env=environment, parameters=parameters)
 StorageLayer(app, "StorageLayerStack", env=environment, parameters=parameters)
-InferenceStack(app, "InferenceStack", env=environment, parameters=parameters)
+#InferenceStack(app, "InferenceStack", env=environment, parameters=parameters)
 
 # Synth the CDK app
 app.synth()

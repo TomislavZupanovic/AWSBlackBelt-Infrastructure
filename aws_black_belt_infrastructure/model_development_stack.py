@@ -288,8 +288,8 @@ class ModelDevelopment(Stack):
             task_definition=mlflow_task_definition, cluster=fargate_cluster,
             task_subnets=subnet_selection,
             desired_count=1, listener_port=80, domain_zone=hosted_zone,
-            domain_name="mlflow", load_balancer_name="mlops-mlflow-load-balancer",
-            open_listener=False, public_load_balancer=False, 
+            domain_name="mlflow", load_balancer_name="mlops-mlflow-LB",
+            open_listener=False, public_load_balancer=True, 
             service_name="mlops-mlflow-service",
             health_check_grace_period=Duration.minutes(3)
         )
@@ -555,44 +555,49 @@ class ModelDevelopment(Stack):
                             ],
                             principals=[aws_iam.AnyPrincipal()]
                     ),
-                    aws_iam.PolicyStatement(
-                            sid="AllowFromVPCLocations",
-                            effect=aws_iam.Effect.ALLOW,
-                            actions=[
-                                "execute-api:Invoke",
-                            ],
-                            resources=[
-                                "execute-api:/*"
-                            ],
-                            principals=[aws_iam.AnyPrincipal()]
-                    ),
-                    aws_iam.PolicyStatement(
-                            sid="DenyFromNonVPCLocations",
-                            effect=aws_iam.Effect.DENY,
-                            actions=[
-                                "execute-api:Invoke",
-                            ],
-                            resources=[
-                                "execute-api:/*"
-                            ],
-                            principals=[aws_iam.AnyPrincipal()],
-                            conditions={
-                                "StringNotEquals": {
-                                    "aws:sourceVpc": self.vpc.vpc_id
-                                }
-                            }
-                    ),
+                    # aws_iam.PolicyStatement(
+                    #         sid="AllowFromVPCLocations",
+                    #         effect=aws_iam.Effect.ALLOW,
+                    #         actions=[
+                    #             "execute-api:Invoke",
+                    #         ],
+                    #         resources=[
+                    #             "execute-api:/*"
+                    #         ],
+                    #         principals=[aws_iam.AnyPrincipal()]
+                    # ),
+                    # aws_iam.PolicyStatement(
+                    #         sid="DenyFromNonVPCLocations",
+                    #         effect=aws_iam.Effect.DENY,
+                    #         actions=[
+                    #             "execute-api:Invoke",
+                    #         ],
+                    #         resources=[
+                    #             "execute-api:/*"
+                    #         ],
+                    #         principals=[aws_iam.AnyPrincipal()],
+                    #         conditions={
+                    #             "StringNotEquals": {
+                    #                 "aws:sourceVpc": self.vpc.vpc_id
+                    #             }
+                    #         }
+                    # ),
                 ])
         
         # Define API Gateway with VPC Endpoint
-        api = aws_apigateway.RestApi(self, "MLOpsAPI", rest_api_name="mlops-api-gateway",
+        # api = aws_apigateway.RestApi(self, "MLOpsAPI", rest_api_name="mlops-api-gateway",
+        #                                          description="API used to start training, inference and define training/inference schedule",
+        #                                          policy=api_policy, deploy=True,
+        #                                          deploy_options=aws_apigateway.StageOptions(stage_name="v1"),
+        #                                          endpoint_configuration=aws_apigateway.EndpointConfiguration(
+        #                                              types=[aws_apigateway.EndpointType.EDGE],
+        #                                              vpc_endpoints=[vpc_endpoint]
+        #                                          ))
+        
+        api = aws_apigateway.RestApi(self, "MLOpsAPIGateway", rest_api_name="mlops-api",
                                                  description="API used to start training, inference and define training/inference schedule",
                                                  policy=api_policy, deploy=True,
-                                                 deploy_options=aws_apigateway.StageOptions(stage_name="v1"),
-                                                 endpoint_configuration=aws_apigateway.EndpointConfiguration(
-                                                     types=[aws_apigateway.EndpointType.PRIVATE],
-                                                     vpc_endpoints=[vpc_endpoint]
-                                                 ))
+                                                 deploy_options=aws_apigateway.StageOptions(stage_name="v1"))
         
         # Define Integration Lambda with API Gateway
         training_integration = aws_apigateway.LambdaIntegration(training_lambda)

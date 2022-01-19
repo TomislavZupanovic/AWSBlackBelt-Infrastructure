@@ -44,8 +44,10 @@ class StorageLayer(Stack):
                                                                                     security_group_id=Fn.import_value("SecurityGroupId"))
         
         # Define Subnet Selection
-        selected_subnets = [aws_ec2.Subnet.from_subnet_id(self, "ImportedSubnet1", subnet_id=parameters["Subnet1_Id"]),
-                            aws_ec2.Subnet.from_subnet_id(self, "ImportedSubnet2", subnet_id=parameters["Subnet2_Id"])]
+        selected_subnets = [aws_ec2.Subnet.from_subnet_attributes(self, "ImportedSubnet1", subnet_id=parameters["Subnet1_Id"],
+                                                                  availability_zone='us-east-1a', route_table_id='rtb-0e9876e2b4570bf40'),
+                            aws_ec2.Subnet.from_subnet_attributes(self, "ImportedSubnet2", subnet_id=parameters["Subnet2_Id"],
+                                                                  availability_zone='us-east-1b', route_table_id='rtb-092c66b81271f6fde')]
         subnet_selection = aws_ec2.SubnetSelection(subnets=selected_subnets)
         
         #===========================================================================================================================

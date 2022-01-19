@@ -46,8 +46,10 @@ class InferenceStack(Stack):
                                                                                     security_group_id=Fn.import_value("SecurityGroupId"))
         
         # Define Subnet Selection
-        selected_subnets = [aws_ec2.Subnet.from_subnet_id(self, "ImportedSubnet1", subnet_id=parameters["Subnet1_Id"]),
-                            aws_ec2.Subnet.from_subnet_id(self, "ImportedSubnet2", subnet_id=parameters["Subnet2_Id"])]
+        selected_subnets = [aws_ec2.Subnet.from_subnet_attributes(self, "ImportedSubnet1", subnet_id=parameters["Subnet1_Id"],
+                                                                  availability_zone='us-east-1a', route_table_id='rtb-0e9876e2b4570bf40'),
+                            aws_ec2.Subnet.from_subnet_attributes(self, "ImportedSubnet2", subnet_id=parameters["Subnet2_Id"],
+                                                                  availability_zone='us-east-1b', route_table_id='rtb-092c66b81271f6fde')]
         subnet_selection = aws_ec2.SubnetSelection(subnets=selected_subnets)
         
         #===========================================================================================================================
@@ -174,16 +176,18 @@ class InferenceStack(Stack):
         #===========================================================================================================================
         
         # Import KMS key
-        kms_key = aws_kms.Key.from_key_arn(self, "ImportedKMSKey", key_arn=Fn.import_value("KMSKeyARN"))
+        # kms_key = aws_kms.Key.from_key_arn(self, "ImportedKMSKey", key_arn=Fn.import_value("KMSKeyARN"))
         
         # Define the Secret for Grafana Aurora DB
-        grafana_db_secret = aws_secretsmanager.Secret(self, "GrafanaDBSecret", encryption_key=kms_key,
+        grafana_db_secret = aws_secretsmanager.Secret(self, "GrafanaDatabaseSecret",
                                                      description="Secret used for connecting to the Grafana MySQL database",
                                                      secret_name="mlops-grafana-db-secret",
                                                      removal_policy=RemovalPolicy.DESTROY,
                                                      generate_secret_string=aws_secretsmanager.SecretStringGenerator(
+                                                         exclude_characters='/@"\' ',
+                                                         exclude_punctuation=True,
                                                          generate_string_key="password",
-                                                         secret_string_template="{\"username\":\"lakefs-user\"}"
+                                                         secret_string_template="{\"username\":\"grafana_user\"}"
                                                      ))
         
         #===========================================================================================================================
@@ -263,8 +267,8 @@ class InferenceStack(Stack):
             task_definition=grafana_task_definition, cluster=fargate_cluster,
             task_subnets=subnet_selection,
             desired_count=1, listener_port=80, domain_zone=hosted_zone,
-            domain_name="grafana", load_balancer_name="mlops-grafana-load-balancer",
-            open_listener=False, public_load_balancer=False, 
+            domain_name="grafana", load_balancer_name="mlops-grafana-LB",
+            open_listener=False, public_load_balancer=True, 
             service_name="mlops-grafana-service",
             health_check_grace_period=Duration.minutes(3)
         )
