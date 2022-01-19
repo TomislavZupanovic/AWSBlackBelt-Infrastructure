@@ -234,11 +234,6 @@ class InferenceStack(Stack):
         #=======================================================GRAFANA=============================================================
         #===========================================================================================================================
         
-        # Import the Route53 Hosted Zone from the Development Stack
-        hosted_zone = aws_route53.HostedZone.from_hosted_zone_attributes(self, "ImportedHostedZone",
-                                                                 hosted_zone_id=Fn.import_value("HostedZoneId"),
-                                                                 zone_name=Fn.import_value("HostedZoneName"))
-        
         # Define Grafana Task Definition
         grafana_task_definition = aws_ecs.FargateTaskDefinition(self, "GrafanaTaskDefinition", cpu=1024, ephemeral_storage_gib=30,
                                                                memory_limit_mib=4096, execution_role=fargate_role,
@@ -266,8 +261,7 @@ class InferenceStack(Stack):
             memory_limit_mib=4096, security_groups=[fargate_security_group],
             task_definition=grafana_task_definition, cluster=fargate_cluster,
             task_subnets=subnet_selection,
-            desired_count=1, listener_port=80, domain_zone=hosted_zone,
-            domain_name="grafana", load_balancer_name="mlops-grafana-LB",
+            desired_count=1, listener_port=80, load_balancer_name="mlops-grafana-load-balancer",
             open_listener=False, public_load_balancer=True, 
             service_name="mlops-grafana-service",
             health_check_grace_period=Duration.minutes(3)

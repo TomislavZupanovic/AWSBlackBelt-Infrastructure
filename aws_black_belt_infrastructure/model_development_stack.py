@@ -9,7 +9,7 @@ from aws_cdk import (
     aws_ecs_patterns,
     aws_lambda,
     aws_ecr,
-    aws_route53, aws_codecommit,
+    aws_codecommit, aws_events_targets,
     aws_codebuild, aws_apigateway,
     RemovalPolicy, Duration,
     Tags, Stack, CfnOutput
@@ -254,11 +254,6 @@ class ModelDevelopment(Stack):
         #=========================================================MLFLOW============================================================
         #===========================================================================================================================
         
-        # Define Route53 Hosted Zone
-        hosted_zone_name = "aast-innovation.iolap.com"
-        hosted_zone = aws_route53.HostedZone(self, "Route53HostedZone",
-                                             vpcs=[self.vpc], zone_name=hosted_zone_name)
-        
         # Define Mlflow Task Definition
         mlflow_task_definition = aws_ecs.FargateTaskDefinition(self, "MLflowTaskDefinition", cpu=1024, ephemeral_storage_gib=30,
                                                                memory_limit_mib=4096, execution_role=fargate_role,
@@ -287,8 +282,8 @@ class ModelDevelopment(Stack):
             memory_limit_mib=4096, security_groups=[fargate_security_group],
             task_definition=mlflow_task_definition, cluster=fargate_cluster,
             task_subnets=subnet_selection,
-            desired_count=1, listener_port=80, domain_zone=hosted_zone,
-            domain_name="mlflow", load_balancer_name="mlops-mlflow-LB",
+            desired_count=1, listener_port=80, 
+            load_balancer_name="mlops-mlflow-load-balancer",
             open_listener=False, public_load_balancer=True, 
             service_name="mlops-mlflow-service",
             health_check_grace_period=Duration.minutes(3)
@@ -334,10 +329,10 @@ class ModelDevelopment(Stack):
                                                             "ecr:GetAuthorizationToken",
                                                             "ecr:InitiateLayerUpload",
                                                             "ecr:PutImage",
-                                                            "ecr:UploadLayerPart"
+                                                            "ecr:UploadLayerPart",
                                                         ],
                                                         resources=[
-                                                            ecr_repository.repository_arn
+                                                            "*"
                                                         ]
                                                     ),
                                                ]
@@ -367,8 +362,11 @@ class ModelDevelopment(Stack):
                                                                 removal_policy=RemovalPolicy.DESTROY,
                                                                 retention=aws_logs.RetentionDays.ONE_WEEK)
                                 )), description=f"CodeBuild used to create and push ML images",
-                                source=aws_codebuild.Source.code_commit(repository=code_repository, branch_or_ref='master', 
-                                                                        identifier="mlops_source_repo"))
+                                source=aws_codebuild.Source.code_commit(repository=code_repository, 
+                                                                        identifier="mlops_source"))
+        
+        code_repository.on_commit("CommitToMaster", branches=['master'], 
+                                  target=aws_events_targets.CodeBuildProject(codebuild_project))
         
         #===========================================================================================================================
         #=========================================================SAGEMAKER=========================================================
@@ -454,10 +452,7 @@ class ModelDevelopment(Stack):
                                                         sid="ECRReadAccess",
                                                         effect=aws_iam.Effect.ALLOW,
                                                         actions=[
-                                                            "ecr:DescribeImages",
-                                                            "ecr:DescribeRepositories",
-                                                            "ecr:BatchGetImage",
-                                                            "ecr:GetDownloadUrlForLayer",
+                                                            "ecr:*",
                                                         ],
                                                         resources=[
                                                             ecr_repository.repository_arn
@@ -640,14 +635,6 @@ class ModelDevelopment(Stack):
         CfnOutput(self, "FargateRoleARNExport", description="ARN of the Fargate Role",
                   value=fargate_role.role_arn,
                   export_name="FargateRoleARN")
-        
-        CfnOutput(self, "HostedZoneIdExport", description="ID of the Route53 Hosted Zone",
-                  value=hosted_zone.hosted_zone_id,
-                  export_name="HostedZoneId")
-        
-        CfnOutput(self, "HostedZoneNameExport", description="Name of the Route53 Hosted Zone",
-                  value=hosted_zone_name,
-                  export_name="HostedZoneName")
         
         CfnOutput(self, "ECRRepositoryArn", description="Arn of the ECR Repository",
                   value=ecr_repository.repository_arn,
