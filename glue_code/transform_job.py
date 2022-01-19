@@ -85,24 +85,26 @@ if __name__ == '__main__':
         data_schema[f'sensor_{i}'] = "double"
     
     if ingest_type == 'partitioned':
+        mode = 'append'
         curated_data = add_timestamp(raw_data)
         data_schema['timestamp'] = "timestamp"
+        table = "mlops-curated-inference-data"
+        path = f"s3://{args['bucket']}/curated/{ingest_type}/parquet/inference"
     else:
+        mode = 'overwrite'
         if 'test' in filename:
-            table = f"mlops-curated-test-data-{ingest_type}"
+            curated_data = raw_data
+            table = "mlops-curated-test-data"
+            path = f"s3://{args['bucket']}/curated/{ingest_type}/parquet/test"
         else:
             curated_data = create_target(raw_data)
-            table = f"mlops-curated-data-{ingest_type}"
             data_schema['rul'] = 'int'
+            table = "mlops-curated-train-data"
+            path = f"s3://{args['bucket']}/curated/{ingest_type}/parquet/train"
 
     # Save transformed data to parquet format
-    dataset_path = f"s3://{args['bucket']}/curated/{ingest_type}/parquet"
-    if ingest_type == 'total':
-        mode = 'overwrite'
-    else:
-        mode = 'append'
-    awswrangler.s3.to_parquet(curated_data, path=dataset_path, dataset=True, mode=mode, compression=None, 
+    awswrangler.s3.to_parquet(curated_data, path=path, dataset=True, mode=mode, compression=None, 
                                 database=args['database_name'], table=table, dtype=data_schema)
     
-    file_path = f"s3://{args['bucket']}/curated/{ingest_type}/parquet/{filename}"
+    file_path = path + f"/{filename}"
     awswrangler.s3.to_parquet(curated_data, path=file_path)
