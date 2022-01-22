@@ -117,8 +117,10 @@ class ModelDevelopment(Stack):
                                                       vpc=self.vpc, description="Security group used for connecting to MLflow Database backend",
                                                       allow_all_outbound=True, security_group_name="mlops-aurora-security-group")
         
-        aurora_security_group.add_ingress_rule(aws_ec2.Peer.ipv4("0.0.0.0/0"),  # TODO: Restrict IP range
-                                               aws_ec2.Port.tcp(5432), "Allow access from VPC to the Database")
+        aurora_security_group.add_ingress_rule(aws_ec2.Peer.ipv4("0.0.0.0/0"), 
+                                               aws_ec2.Port.tcp(5432), "Allow access to the PostgreSQL")
+        aurora_security_group.add_ingress_rule(aws_ec2.Peer.ipv4("0.0.0.0/0"),  
+                                               aws_ec2.Port.tcp(3306), "Allow access to the MySQL")
         
         # Define Serverless Aurora for MLflow backend
         mlflow_database_name = "MLflowBackend"
@@ -229,6 +231,60 @@ class ModelDevelopment(Stack):
                                                         ],
                                                         resources=[
                                                             "*"
+                                                        ]
+                                                    ),
+                                                    aws_iam.PolicyStatement(
+                                                        sid="AthenaQueryAccess",
+                                                        effect=aws_iam.Effect.ALLOW,
+                                                        actions=[
+                                                            "athena:ListDatabases",
+                                                            "athena:ListDataCatalogs",
+                                                            "athena:ListWorkGroups",
+                                                            "athena:GetDatabase",
+                                                            "athena:GetDataCatalog",
+                                                            "athena:GetQueryExecution",
+                                                            "athena:GetQueryResults",
+                                                            "athena:GetTableMetadata",
+                                                            "athena:GetWorkGroup",
+                                                            "athena:ListTableMetadata",
+                                                            "athena:StartQueryExecution",
+                                                            "athena:StopQueryExecution"
+                                                        ],
+                                                        resources=[
+                                                            "*"
+                                                        ]
+                                                    ),
+                                                    aws_iam.PolicyStatement(
+                                                        sid="GlueReadAccess",
+                                                        effect=aws_iam.Effect.ALLOW,
+                                                        actions=[
+                                                            "glue:GetDatabase",
+                                                            "glue:GetDatabases",
+                                                            "glue:GetTable",
+                                                            "glue:GetTables",
+                                                            "glue:GetPartition",
+                                                            "glue:GetPartitions",
+                                                            "glue:BatchGetPartition"
+                                                        ],
+                                                        resources=[
+                                                            "*"
+                                                        ]
+                                                    ),
+                                                    aws_iam.PolicyStatement(
+                                                        sid="AthenaS3Access",
+                                                        effect=aws_iam.Effect.ALLOW,
+                                                        actions=[
+                                                            "s3:GetBucketLocation",
+                                                            "s3:GetObject",
+                                                            "s3:ListBucket",
+                                                            "s3:ListBucketMultipartUploads",
+                                                            "s3:ListMultipartUploadParts",
+                                                            "s3:AbortMultipartUpload",
+                                                            "s3:PutObject"
+                                                        ],
+                                                        resources=[
+                                                            "arn:aws:s3:::mlops-storage-bucket",
+                                                            "arn:aws:s3:::mlops-storage-bucket/*"
                                                         ]
                                                     ),
                                                ]
@@ -560,7 +616,7 @@ class ModelDevelopment(Stack):
                                 "execute-api:/*"
                             ],
                             principals=[aws_iam.AnyPrincipal()]
-                    ),
+                    )
                     # aws_iam.PolicyStatement(
                     #         sid="DenyFromNonVPCLocations",
                     #         effect=aws_iam.Effect.DENY,
@@ -619,6 +675,10 @@ class ModelDevelopment(Stack):
         # CfnOutput(self, "KMSKeyARN", description="ARN of the KMS Key",
         #           value=kms_key.key_arn,
         #           export_name="KMSKeyARN")
+        
+        CfnOutput(self, "SecretARNExport", description="ARN of the Secret",
+                  value=mlflow_db_secret.secret_full_arn,
+                  export_name="SecretARN")
         
         CfnOutput(self, "FargateClusterARN", description="ARN of the Fargate Cluster",
                   value=fargate_cluster.cluster_arn,

@@ -94,17 +94,17 @@ def start_training(image_tag: str, parameters: dict) -> dict:
     """
     sagemaker = boto3.client("sagemaker", region_name='us-east-1')
     current_time = datetime.now().strftime("%y-%m-%d-%H-%M-%S")
-    name = f"model-training-{current_time}"
+    job_name = f"model-training-{current_time}"
     image = os.environ['ImageUri'] + ':' + image_tag
     environment = {'ImageTag': image_tag}
     for name, value in parameters.items():
         environment[name] = value
     # Define the Sagemaker Processing Job parameters
-    response = sagemaker.create_processing_job(ProcessingJobName=name,
+    response = sagemaker.create_processing_job(ProcessingJobName=job_name,
                                                ProcessingResources={
                                                    'ClusterConfig': {
                                                        'InstanceCount': 1,
-                                                       'InstanceType': 'ml.t3.medium',
+                                                       'InstanceType': 'ml.c5.2xlarge',
                                                        'VolumeSizeInGB': 30
                                                    }
                                                },

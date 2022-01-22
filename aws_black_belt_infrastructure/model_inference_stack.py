@@ -179,16 +179,20 @@ class InferenceStack(Stack):
         # kms_key = aws_kms.Key.from_key_arn(self, "ImportedKMSKey", key_arn=Fn.import_value("KMSKeyARN"))
         
         # Define the Secret for Grafana Aurora DB
-        grafana_db_secret = aws_secretsmanager.Secret(self, "GrafanaDatabaseSecret",
-                                                     description="Secret used for connecting to the Grafana MySQL database",
-                                                     secret_name="mlops-grafana-db-secret",
-                                                     removal_policy=RemovalPolicy.DESTROY,
-                                                     generate_secret_string=aws_secretsmanager.SecretStringGenerator(
-                                                         exclude_characters='/@"\' ',
-                                                         exclude_punctuation=True,
-                                                         generate_string_key="password",
-                                                         secret_string_template="{\"username\":\"grafana_user\"}"
-                                                     ))
+        # grafana_db_secret = aws_secretsmanager.Secret(self, "GrafanaDatabaseSecret",
+        #                                              description="Secret used for connecting to the Grafana MySQL database",
+        #                                              secret_name="mlops-grafana-db",
+        #                                              removal_policy=RemovalPolicy.DESTROY,
+        #                                              generate_secret_string=aws_secretsmanager.SecretStringGenerator(
+        #                                                  exclude_characters='/@"\' ',
+        #                                                  exclude_punctuation=True,
+        #                                                  generate_string_key="password",
+        #                                                  secret_string_template="{\"username\":\"grafana_user\"}"
+        #                                              ))
+        
+        # Import the MLflow secret to reuse for Grafana Aurora DB
+        grafana_db_secret = aws_secretsmanager.Secret.from_secret_complete_arn(self, "ImportedDBSecret", 
+                                                                               secret_complete_arn=Fn.import_value("SecretARN"))
         
         #===========================================================================================================================
         #=======================================================AURORA==============================================================
@@ -196,7 +200,7 @@ class InferenceStack(Stack):
         
         # Import Aurora Security Group from Model Developmnet Stack
         aurora_security_group = aws_ec2.SecurityGroup.from_security_group_id(self, "ImportedAuroraSecurityGroup",
-                                                     security_group_id=Fn.import_value("SecurityGroupId"))
+                                                     security_group_id=Fn.import_value("AuroraSecurityGroupId"))
         
         # Define Grafana backend Aurora Database
         grafana_database_name = "Grafana"
@@ -244,7 +248,6 @@ class InferenceStack(Stack):
                                              image=aws_ecs.ContainerImage.from_asset(directory="grafana"),
                                              container_name="grafana-task-container", privileged=False,
                                              port_mappings=[aws_ecs.PortMapping(container_port=3000, protocol=aws_ecs.Protocol.TCP)],
-                                             logging=aws_ecs.LogDriver.aws_logs(stream_prefix="grafana-task"),
                                              secrets={
                                                  "DB_USERNAME": aws_ecs.Secret.from_secrets_manager(grafana_db_secret, "username"),
                                                  "DB_PASSWORD": aws_ecs.Secret.from_secrets_manager(grafana_db_secret, "password")
@@ -268,7 +271,7 @@ class InferenceStack(Stack):
         )
         # Attach Fargate Security Group to the Grafana Load Balancer
         grafana_load_balanced_service.load_balancer.add_security_group(fargate_security_group)
-        grafana_load_balanced_service.target_group.configure_health_check(path="/login", interval=Duration.seconds(60),
+        grafana_load_balanced_service.target_group.configure_health_check(path="/login", interval=Duration.seconds(120),
                                                                          timeout=Duration.seconds(10))
         
         #===========================================================================================================================

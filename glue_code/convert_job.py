@@ -18,7 +18,7 @@ args = getResolvedOptions(sys.argv,
 # Get the raw csv data
 s3 = boto3.client('s3')
 obj = s3.get_object(Bucket=args['bucket'], Key=args['file_key'])
-raw_data = pd.read_csv(io.BytesIO(obj['Body'].read()))
+raw_data = pd.read_csv(io.BytesIO(obj['Body'].read()), header=None)
 
 # Get ingest type
 ingest_type = args['ingest_type']
