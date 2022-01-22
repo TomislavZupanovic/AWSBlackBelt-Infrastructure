@@ -31,8 +31,9 @@ def add_timestamp(input_data: pd.DataFrame) -> pd.DataFrame:
     for unit in splitted_data['unit'].unique():
         # Get rows only for the specified unit
         unit_splitted = splitted_data[splitted_data['unit']==unit]
+        end_unit = len(unit_splitted)
         # Add the reversed timestamps as additional column
-        unit_splitted.loc[:, 'timestamp'] = time_list
+        unit_splitted.loc[:, 'timestamp'] = time_list[:end_unit]
         # Append new dataframe for specified unit
         timestamp_data_list.append(unit_splitted)
     # Concatenate all dataframes of specified units into one dataframe
