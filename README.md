@@ -6,7 +6,7 @@ This is Infrastructure-as-Code (IaC) written with AWS CDK for AWS Black Belt Pre
 
 ## Architecture Diagram
 
-<img src="https://github.com/TomislavZupanovic/GraphSLAM-2D/blob/main/images/Figure1.jpeg" width="700" height="500">
+<img src="https://github.com/TomislavZupanovic/AWSBlackBelt-Infrastructure/blob/main/Images/BlackBelt%20-%20Architecture.jpg" width="860" height="860">
 
 ## Useful commands for CDK
 
