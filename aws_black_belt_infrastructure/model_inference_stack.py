@@ -101,10 +101,7 @@ class InferenceStack(Stack):
                                                         sid="ECRReadAccess",
                                                         effect=aws_iam.Effect.ALLOW,
                                                         actions=[
-                                                            "ecr:DescribeImages",
-                                                            "ecr:DescribeRepositories",
-                                                            "ecr:BatchGetImage",
-                                                            "ecr:GetDownloadUrlForLayer",
+                                                            "ecr:*"
                                                         ],
                                                         resources=[
                                                             ecr_repository.repository_arn
@@ -153,6 +150,7 @@ class InferenceStack(Stack):
                                               environment={
                                                         "SagemakerRoleArn": Fn.import_value("SagemakerRoleArn"),
                                                         "ImageUri": ecr_repository.repository_uri,
+                                                        "ECRRepositoryName": ecr_repository.repository_name,
                                                         "SecurityGroupId": self.outbound_security_group.security_group_id,
                                                         "Subnet0": subnets_ids[0],
                                                         "Subnet1": subnets_ids[1],

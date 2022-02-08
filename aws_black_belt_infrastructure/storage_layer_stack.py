@@ -111,8 +111,7 @@ class StorageLayer(Stack):
                                                         ],
                                                         resources=[
                                                             glue_database.catalog_arn,
-                                                            glue_database.database_arn # TODO: Add tables arn
-                                                            
+                                                            glue_database.database_arn # TODO: Add tables arn   
                                                         ]
                                                     ),
                                                 ])

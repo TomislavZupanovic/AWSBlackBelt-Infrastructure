@@ -23,7 +23,7 @@ def add_timestamp(input_data: pd.DataFrame) -> pd.DataFrame:
         # Calculate new time based on difference of current row
         new_time = current_time - timedelta(hours=i)
         # Append the new time as string in list
-        time_list.append(new_time.strftime('%Y-%m-%d %H-%M-%S'))
+        time_list.append(new_time.strftime('%Y-%m-%d %H:%M:%S'))
     # Reverse the time list so that current time is last in unit
     time_list.reverse()
     timestamp_data_list = []

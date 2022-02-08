@@ -93,13 +93,13 @@ def start_inference(image_tag: str, parameters: dict) -> dict:
     """
     sagemaker = boto3.client("sagemaker", region_name='us-east-1')
     current_time = datetime.now().strftime("%y-%m-%d-%H-%M-%S")
-    name = f"model-inference-{current_time}"
+    job_name = f"model-inference-{current_time}"
     image = os.environ['ImageUri'] + ':' + image_tag
     environment = {}
     for name, value in parameters.items():
         environment[name] = value
     # Define the Sagemaker Processing Job parameters
-    response = sagemaker.create_processing_job(ProcessingJobName=name,
+    response = sagemaker.create_processing_job(ProcessingJobName=job_name,
                                                ProcessingResources={
                                                    'ClusterConfig': {
                                                        'InstanceCount': 1,

@@ -454,6 +454,24 @@ class ModelDevelopment(Stack):
                                                             "*"
                                                         ]
                                                     ),
+                                                    aws_iam.PolicyStatement(
+                                                        sid="GlueTablesAccess",
+                                                        effect=aws_iam.Effect.ALLOW,
+                                                        actions=[
+                                                            "glue:GetSchemaByDefinition",
+                                                            "glue:CreateSchema",
+                                                            "glue:RegisterSchemaVersion",
+                                                            "glue:PutSchemaVersionMetadata",
+                                                            "glue:GetSchemaVersion",
+                                                            "glue:GetDatabase",
+                                                            "glue:GetDatabases",
+                                                            "glue:*Table*",
+                                                            "glue:*Partition*",
+                                                        ],
+                                                        resources=[
+                                                            "*" 
+                                                        ]
+                                                    ),
                                                ]
                                             )
         
