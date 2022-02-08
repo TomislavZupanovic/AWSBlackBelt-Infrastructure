@@ -1,16 +1,13 @@
 from aws_cdk import (
-    aws_ecs,
-    aws_kms,
     aws_s3,
     aws_logs,
     aws_glue_alpha as aws_glue,
-    aws_iam, aws_secretsmanager,
-    aws_ec2, aws_rds, aws_route53,
+    aws_iam,
+    aws_ec2,
     aws_lambda, aws_s3_notifications,
     aws_stepfunctions_tasks, aws_stepfunctions,
-    aws_ecs_patterns,
     RemovalPolicy,
-    Tags, Stack, Duration, CfnOutput, Fn
+    Tags, Stack, Duration,Fn
 )
 from constructs import Construct
 

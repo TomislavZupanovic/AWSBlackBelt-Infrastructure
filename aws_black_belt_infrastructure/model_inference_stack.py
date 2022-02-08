@@ -2,18 +2,13 @@ from aws_cdk import (
     aws_apigateway,
     aws_ecr,
     aws_ecs,
-    aws_kms,
-    aws_s3,
     aws_iam, aws_secretsmanager,
-    aws_ec2, aws_rds, aws_route53,
-    aws_lambda, aws_s3_notifications,
-    aws_stepfunctions_tasks, aws_stepfunctions,
+    aws_ec2, aws_rds,
+    aws_lambda,
     aws_ecs_patterns,
-    RemovalPolicy,
-    Tags, Stack, Duration, CfnOutput, Fn
+    Tags, Stack, Duration, Fn
 )
 from constructs import Construct
-
 
 
 class InferenceStack(Stack):
@@ -170,24 +165,9 @@ class InferenceStack(Stack):
         events_principal = aws_iam.ServicePrincipal("events.amazonaws.com")
         inference_lambda.grant_invoke(events_principal)
         #===========================================================================================================================
-        #=======================================================KMS & SECRET==============================================================
+        #=======================================================SECRET==============================================================
         #===========================================================================================================================
-        
-        # Import KMS key
-        # kms_key = aws_kms.Key.from_key_arn(self, "ImportedKMSKey", key_arn=Fn.import_value("KMSKeyARN"))
-        
-        # Define the Secret for Grafana Aurora DB
-        # grafana_db_secret = aws_secretsmanager.Secret(self, "GrafanaDatabaseSecret",
-        #                                              description="Secret used for connecting to the Grafana MySQL database",
-        #                                              secret_name="mlops-grafana-db",
-        #                                              removal_policy=RemovalPolicy.DESTROY,
-        #                                              generate_secret_string=aws_secretsmanager.SecretStringGenerator(
-        #                                                  exclude_characters='/@"\' ',
-        #                                                  exclude_punctuation=True,
-        #                                                  generate_string_key="password",
-        #                                                  secret_string_template="{\"username\":\"grafana_user\"}"
-        #                                              ))
-        
+
         # Import the MLflow secret to reuse for Grafana Aurora DB
         grafana_db_secret = aws_secretsmanager.Secret.from_secret_complete_arn(self, "ImportedDBSecret", 
                                                                                secret_complete_arn=Fn.import_value("SecretARN"))

@@ -3,7 +3,6 @@ from aws_cdk import (
     aws_iam, aws_logs,
     aws_ec2,
     aws_secretsmanager,
-    aws_kms,
     aws_rds,
     aws_ecs,
     aws_ecs_patterns,
@@ -48,11 +47,6 @@ class ModelDevelopment(Stack):
         self.outbound_security_group = aws_ec2.SecurityGroup(self, "OutboundSecurityGroup",
                                                         vpc=self.vpc, description="Allow all outbound access only",
                                                         allow_all_outbound=True, security_group_name="mlops-security-group")
-        
-        # Import VPC Endpoint Security Group
-        # vpc_endpoint_security_group = aws_ec2.SecurityGroup.from_security_group_id(
-        #     self, "VPCEndpointSecurityGroupImport", security_group_id=self.vpc_security_group_id
-        # )
 
         # Define Subnet Selection
         selected_subnets = [aws_ec2.Subnet.from_subnet_attributes(self, "ImportedSubnet1", subnet_id=parameters["Subnet1_Id"],
@@ -60,12 +54,6 @@ class ModelDevelopment(Stack):
                             aws_ec2.Subnet.from_subnet_attributes(self, "ImportedSubnet2", subnet_id=parameters["Subnet2_Id"],
                                                                   availability_zone='us-east-1b', route_table_id='rtb-092c66b81271f6fde')]
         subnet_selection = aws_ec2.SubnetSelection(subnets=selected_subnets)
-        
-        # VPC Endpoint for API Gateway
-        vpc_endpoint = aws_ec2.InterfaceVpcEndpoint(self, "VPCEndpointInterface", 
-                                                    vpc=self.vpc, service=aws_ec2.InterfaceVpcEndpointService(
-                                                        name="com.amazonaws.us-east-1.execute-api", port=443
-                                                    ), subnets=subnet_selection)
         
         #===========================================================================================================================
         #=========================================================S3================================================================
@@ -78,23 +66,8 @@ class ModelDevelopment(Stack):
                                        versioned=False, encryption=aws_s3.BucketEncryption.S3_MANAGED)
         
         #===========================================================================================================================
-        #=========================================================KMS & SECRET======================================================
+        #=========================================================SECRET============================================================
         #===========================================================================================================================
-        
-        # Define the KMS key for Secret Encryption/Decryption
-        # kms_key = aws_kms.Key(self, "MLflowDBSecretKey", description="Key used for MLflow DB Secret",
-        #                          enabled=True, enable_key_rotation=False,
-        #                          policy=aws_iam.PolicyDocument(
-        #                                     statements=[aws_iam.PolicyStatement(
-        #                                         actions=["kms:Create*", 
-        #                                                  "kms:Describe*", 
-        #                                                  "kms:Enable*", 
-        #                                                  "kms:List*", 
-        #                                                  "kms:Put*"
-        #                                         ],
-        #                                         principals=[aws_iam.AccountRootPrincipal()],
-        #                                         resources=["*"]
-        #                                     )])) # removal_policy=RemovalPolicy.DESTROY)
         
         # Define the Secret for MLflow Aurora DB
         mlflow_db_secret = aws_secretsmanager.Secret(self, "MLflowDBSecret",
@@ -635,34 +608,9 @@ class ModelDevelopment(Stack):
                             ],
                             principals=[aws_iam.AnyPrincipal()]
                     )
-                    # aws_iam.PolicyStatement(
-                    #         sid="DenyFromNonVPCLocations",
-                    #         effect=aws_iam.Effect.DENY,
-                    #         actions=[
-                    #             "execute-api:Invoke",
-                    #         ],
-                    #         resources=[
-                    #             "execute-api:/*"
-                    #         ],
-                    #         principals=[aws_iam.AnyPrincipal()],
-                    #         conditions={
-                    #             "StringNotEquals": {
-                    #                 "aws:sourceVpc": self.vpc.vpc_id
-                    #             }
-                    #         }
-                    # ),
                 ])
         
-        # Define API Gateway with VPC Endpoint
-        # api = aws_apigateway.RestApi(self, "MLOpsAPI", rest_api_name="mlops-api-gateway",
-        #                                          description="API used to start training, inference and define training/inference schedule",
-        #                                          policy=api_policy, deploy=True,
-        #                                          deploy_options=aws_apigateway.StageOptions(stage_name="v1"),
-        #                                          endpoint_configuration=aws_apigateway.EndpointConfiguration(
-        #                                              types=[aws_apigateway.EndpointType.EDGE],
-        #                                              vpc_endpoints=[vpc_endpoint]
-        #                                          ))
-        
+        # Define API Gateway
         api = aws_apigateway.RestApi(self, "MLOpsAPIGateway", rest_api_name="mlops-api",
                                                  description="API used to start training, inference and define training/inference schedule",
                                                  policy=api_policy, deploy=True,
@@ -689,10 +637,6 @@ class ModelDevelopment(Stack):
         CfnOutput(self, "AuroraSecurityGroupExport", description="ID of the Aurora Security Group",
                   value=aurora_security_group.security_group_id,
                   export_name="AuroraSecurityGroupId")
-        
-        # CfnOutput(self, "KMSKeyARN", description="ARN of the KMS Key",
-        #           value=kms_key.key_arn,
-        #           export_name="KMSKeyARN")
         
         CfnOutput(self, "SecretARNExport", description="ARN of the Secret",
                   value=mlflow_db_secret.secret_full_arn,
