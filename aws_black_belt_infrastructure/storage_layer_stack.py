@@ -42,9 +42,9 @@ class StorageLayer(Stack):
         
         # Define Subnet Selection
         selected_subnets = [aws_ec2.Subnet.from_subnet_attributes(self, "ImportedSubnet1", subnet_id=parameters["Subnet1_Id"],
-                                                                  availability_zone='us-east-1a', route_table_id='rtb-0e9876e2b4570bf40'),
+                                                                  availability_zone=parameters["Az1"], route_table_id=parameters["RouteTableId1"]),
                             aws_ec2.Subnet.from_subnet_attributes(self, "ImportedSubnet2", subnet_id=parameters["Subnet2_Id"],
-                                                                  availability_zone='us-east-1b', route_table_id='rtb-092c66b81271f6fde')]
+                                                                  availability_zone=parameters["Az2"], route_table_id=parameters["RouteTableId2"])]
         subnet_selection = aws_ec2.SubnetSelection(subnets=selected_subnets)
         
         #===========================================================================================================================
