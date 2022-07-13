@@ -9,7 +9,7 @@ from aws_black_belt_infrastructure.model_inference_stack import InferenceStack
 # Initialize the CDK app
 app = cdk.App()
 
-# Define the Account parameters for Stacks  NOTE: Removed for privacy
+# Define the Account parameters for Stacks
 parameters = {"Owner": "*******",
               "Project": "*******",
               "AccountId": "*******",
@@ -23,7 +23,8 @@ parameters = {"Owner": "*******",
               "RouteTableId1": "*******",
               "RouteTableId2": "*******",
               "Az1": "*******",
-              "Az2": "*******"}  
+              "Az2": "*******"} 
+
 
 # Define the CDK Environment parameters
 environment = cdk.Environment(account=parameters["AccountId"], region=parameters["Region"])

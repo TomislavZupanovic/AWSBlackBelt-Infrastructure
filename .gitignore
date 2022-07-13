@@ -14,3 +14,5 @@ cdk.out
 aws_sso.py
 testing.py
 cdk_params.py
+cdk.context.json
+cdk.json
